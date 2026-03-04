@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "FutzinMarcador",
+  applicationName: "FutzinMarcador",
   description: "Marcador ao vivo + ranking por temporada",
 };
 
