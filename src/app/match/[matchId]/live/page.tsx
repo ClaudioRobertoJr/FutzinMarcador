@@ -781,10 +781,10 @@ export default function LiveMatchPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Header sticky */}
-      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
+      {/* Header sticky (compacto) */}
+      <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <div className="text-xs text-muted-foreground">
                 Partida ao vivo
@@ -820,132 +820,133 @@ export default function LiveMatchPage() {
                 </div>
               </CardContent>
             </Card>
-
-            <div className="flex gap-2 flex-wrap">
-              <Button variant="outline" onClick={undoLast} disabled={!canEdit}>
-                Desfazer
-              </Button>
-
-              <Button onClick={nextRoundSameTeams} disabled={!canEdit}>
-                Próxima (mesmos)
-              </Button>
-
-              <Button variant="outline" onClick={endThisMatch} disabled={!canEdit}>
-                Encerrar
-              </Button>
-
-              {hasTeamC && (
-                <Button variant="outline" onClick={() => setShowRotation((v) => !v)}>
-                  Rotação
-                </Button>
-              )}
-            </div>
           </div>
 
-          {/* PIN row */}
-          <Card className={CARD_SURFACE_STATIC}>
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="text-sm text-muted-foreground">
-                  Edição: <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
+          <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+            <Button className="shrink-0" variant="outline" onClick={undoLast} disabled={!canEdit}>
+              Desfazer
+            </Button>
+
+            <Button className="shrink-0" onClick={nextRoundSameTeams} disabled={!canEdit}>
+              Próxima (mesmos)
+            </Button>
+
+            <Button className="shrink-0" variant="outline" onClick={endThisMatch} disabled={!canEdit}>
+              Encerrar
+            </Button>
+
+            {hasTeamC && (
+              <Button className="shrink-0" variant="outline" onClick={() => setShowRotation((v) => !v)}>
+                Rotação
+              </Button>
+            )}
+          </div>
+
+          <div className="md:hidden">
+            <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as TeamSide)}>
+              <TabsList className="w-full">
+                <TabsTrigger className="flex-1" value="A">
+                  {meta.teamA}
+                </TabsTrigger>
+                <TabsTrigger className="flex-1" value="B">
+                  {meta.teamB}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </div>
+
+      {/* Controles (fora do sticky) */}
+      <div className="max-w-5xl mx-auto px-4 pt-3 space-y-3">
+        <Card className={CARD_SURFACE_STATIC}>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="text-sm text-muted-foreground">
+                Edição: <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
+              </div>
+
+              <Input
+                type="password"
+                className="w-44"
+                placeholder="PIN do grupo"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+              />
+
+              <Button onClick={unlockEdit}>Liberar</Button>
+              <Button variant="outline" onClick={lockEdit}>
+                Bloquear
+              </Button>
+
+              <div className="ml-auto flex items-center gap-3 text-sm">
+                <a className="underline" href={`/match/${matchId}/setup`}>
+                  Setup
+                </a>
+                <a className="underline" href={`/g/${groupId}`}>
+                  Grupo
+                </a>
+                <a className="underline" href={`/`}>
+                  Home
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {hasTeamC && showRotation && (
+          <Card className={CARD_SURFACE}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Próxima rodada (3 times / rotação)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid md:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Joga 1</div>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background/70 px-3"
+                    value={play1}
+                    onChange={(e) => setPlay1(e.target.value as Side3)}
+                  >
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
                 </div>
 
-                <Input
-                  type="password"
-                  className="w-44"
-                  placeholder="PIN do grupo"
-                  value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value)}
-                />
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Joga 2</div>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background/70 px-3"
+                    value={play2}
+                    onChange={(e) => setPlay2(e.target.value as Side3)}
+                  >
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
+                </div>
 
-                <Button onClick={unlockEdit}>Liberar</Button>
-                <Button variant="outline" onClick={lockEdit}>
-                  Bloquear
-                </Button>
-
-                <div className="ml-auto flex items-center gap-3 text-sm">
-                  <a className="underline" href={`/match/${matchId}/setup`}>
-                    Setup
-                  </a>
-                  <a className="underline" href={`/g/${groupId}`}>
-                    Grupo
-                  </a>
-                  <a className="underline" href={`/`}>
-                    Home
-                  </a>
+                <div className="space-y-1">
+                  <div className="text-sm text-muted-foreground">Espera</div>
+                  <select
+                    className="h-10 w-full rounded-md border bg-background/70 px-3"
+                    value={waiting}
+                    onChange={(e) => setWaiting(e.target.value as Side3)}
+                  >
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="mt-3 md:hidden">
-                <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as TeamSide)}>
-                  <TabsList className="w-full">
-                    <TabsTrigger className="flex-1" value="A">
-                      {meta.teamA}
-                    </TabsTrigger>
-                    <TabsTrigger className="flex-1" value="B">
-                      {meta.teamB}
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
+              <Button className="w-full" onClick={nextRoundRotation} disabled={!canEdit}>
+                Encerrar 10min e iniciar próxima (rotação)
+              </Button>
             </CardContent>
           </Card>
-
-          {/* Rotation panel */}
-          {hasTeamC && showRotation && (
-            <Card className={CARD_SURFACE}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Próxima rodada (3 times / rotação)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid md:grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Joga 1</div>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background/70 px-3"
-                      value={play1}
-                      onChange={(e) => setPlay1(e.target.value as Side3)}
-                    >
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Joga 2</div>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background/70 px-3"
-                      value={play2}
-                      onChange={(e) => setPlay2(e.target.value as Side3)}
-                    >
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-sm text-muted-foreground">Espera</div>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background/70 px-3"
-                      value={waiting}
-                      onChange={(e) => setWaiting(e.target.value as Side3)}
-                    >
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                    </select>
-                  </div>
-                </div>
-
-                <Button className="w-full" onClick={nextRoundRotation} disabled={!canEdit}>
-                  Encerrar 10min e iniciar próxima (rotação)
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Campo */}

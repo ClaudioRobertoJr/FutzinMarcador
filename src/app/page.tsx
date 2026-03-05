@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type GroupRow = {
   id: string;
@@ -21,6 +22,80 @@ function fmtDate(iso: string) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = d.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+function InstallAppButton() {
+  const [deferred, setDeferred] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [openIOS, setOpenIOS] = useState(false);
+
+  useEffect(() => {
+    const ua = window.navigator.userAgent.toLowerCase();
+    const ios = /iphone|ipad|ipod/.test(ua);
+    setIsIOS(ios);
+
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      (window.navigator as any).standalone === true;
+
+    setIsStandalone(!!standalone);
+
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferred(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler as any);
+    return () => window.removeEventListener("beforeinstallprompt", handler as any);
+  }, []);
+
+  // já está instalado
+  if (isStandalone) return null;
+
+  // Android/Chrome/Edge: só aparece se o navegador sinalizar que está instalável
+  // iOS: não existe beforeinstallprompt -> mostra instrução manual
+  if (!deferred && !isIOS) return null;
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        onClick={async () => {
+          if (deferred) {
+            deferred.prompt();
+            try {
+              await deferred.userChoice;
+            } finally {
+              setDeferred(null);
+            }
+          } else {
+            setOpenIOS(true);
+          }
+        }}
+      >
+        Instalar
+      </Button>
+
+      <Dialog open={openIOS} onOpenChange={setOpenIOS}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Instalar no iPhone</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm space-y-2">
+            <div>
+              No Safari: toque em <b>Compartilhar</b> → <b>Adicionar à Tela de Início</b>.
+            </div>
+            <div className="text-muted-foreground">
+              (No iOS não aparece o botão automático de instalar como no Android.)
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 export default function HomePage() {
@@ -79,9 +154,13 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
-        <div className="space-y-2">
-          <div className="text-sm text-muted-foreground">Futzin Marcador</div>
-          <h1 className="text-3xl font-black tracking-tight">Home</h1>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">Futzin Marcador</div>
+            <h1 className="text-3xl font-black tracking-tight">Home</h1>
+          </div>
+
+          <InstallAppButton />
         </div>
 
         <Card>
