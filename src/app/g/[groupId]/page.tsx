@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { MoreVertical, KeyRound } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -20,11 +21,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// dropdown menu (para reduzir densidade do header no mobile)
+// dialog (PIN)
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+// dropdown menu (mobile)
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -57,22 +62,26 @@ function clamp99(n: number) {
   return Math.max(0, Math.min(99, n));
 }
 
-function StatPill({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function typeLabel(t: Player["type"]) {
+  return t === "FIXO" ? "Fixo" : "Complete";
+}
+
+function posLabel(p: Pos | null) {
+  if (!p) return "sem posição";
+  if (p === "GK") return "Goleiro (GK)";
+  if (p === "FIXO") return "Fixo";
+  if (p === "ALA_E") return "Ala E";
+  if (p === "ALA_D") return "Ala D";
+  if (p === "PIVO") return "Pivô";
+  return p;
+}
+
+function StatPill({ label, value }: { label: string; value: number }) {
   const v = clamp99(value);
   return (
     <div className="w-[68px] rounded-xl border bg-muted/50 px-2 py-1">
-      <div className="text-[10px] font-semibold text-muted-foreground text-center">
-        {label}
-      </div>
+      <div className="text-[10px] font-semibold text-muted-foreground text-center">{label}</div>
       <div className="text-sm font-black tabular-nums text-center">{v}</div>
-
-      {/* barra de progresso simples */}
       <div className="mt-1 w-full bg-muted rounded-full h-1 overflow-hidden">
         <div className="h-1 bg-primary" style={{ width: `${(v / 99) * 100}%` }} />
       </div>
@@ -130,21 +139,23 @@ function PlayerCard({
   }
 
   return (
-    <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:bg-card hover:shadow-md transition">
-      {/* reduz espaço vazio quando fechado: padding menor no modo fechado */}
-      <CardContent className={open ? "p-4 space-y-3" : "p-3 space-y-2"}>
+    <Card className="h-full border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:bg-card hover:shadow-md transition">
+      <CardContent className={(open ? "p-4 space-y-3" : "p-3 space-y-2") + " h-full flex flex-col"}>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-lg font-black leading-tight">{p.name}</div>
-            <div className="text-xs font-semibold text-muted-foreground">
-              {p.type} • {p.preferred_pos ?? "sem posição"}
+          <div className="min-w-0">
+            {/* nome truncado (altura consistente) */}
+            <div className="text-lg font-black leading-tight truncate" title={p.name}>
+              {p.name}
+            </div>
+            <div className="text-xs font-semibold text-muted-foreground truncate">
+              {typeLabel(p.type)} • {posLabel(p.preferred_pos)}
             </div>
           </div>
 
           <Button
             variant="outline"
             size="sm"
-            className="h-9"
+            className="h-9 shrink-0"
             disabled={!canEdit}
             onClick={() => setOpen((v) => !v)}
             type="button"
@@ -153,7 +164,6 @@ function PlayerCard({
           </Button>
         </div>
 
-        {/* pills + progresso: gap-3 e w-[68px] */}
         <div className="flex flex-wrap gap-3">
           <StatPill label="VEL" value={p.pace ?? 50} />
           <StatPill label="CHU" value={p.shooting ?? 50} />
@@ -171,9 +181,7 @@ function PlayerCard({
                 <div className="text-xs font-semibold text-muted-foreground">Posição</div>
                 <Select
                   value={pos || "__none__"}
-                  onValueChange={(v) =>
-                    setPos((v === "__none__" ? "" : (v as Pos)) as any)
-                  }
+                  onValueChange={(v) => setPos((v === "__none__" ? "" : (v as Pos)) as any)}
                   disabled={!canEdit}
                 >
                   <SelectTrigger>
@@ -181,17 +189,17 @@ function PlayerCard({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">(sem)</SelectItem>
-                    <SelectItem value="GK">GK</SelectItem>
-                    <SelectItem value="FIXO">FIXO</SelectItem>
-                    <SelectItem value="ALA_E">ALA_E</SelectItem>
-                    <SelectItem value="ALA_D">ALA_D</SelectItem>
-                    <SelectItem value="PIVO">PIVO</SelectItem>
+                    <SelectItem value="GK">Goleiro (GK)</SelectItem>
+                    <SelectItem value="FIXO">Fixo</SelectItem>
+                    <SelectItem value="ALA_E">Ala E</SelectItem>
+                    <SelectItem value="ALA_D">Ala D</SelectItem>
+                    <SelectItem value="PIVO">Pivô</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="text-xs text-muted-foreground leading-relaxed">
-                Dica: mantenha 50 como padrão e ajuste só o que for realmente visível em quadra.
+                Fixos/Completes: use para separar quem está sempre no grupo vs quem entra quando precisa.
               </div>
             </div>
 
@@ -243,31 +251,6 @@ function PlayerCard({
               />
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              {[
-                { key: "VEL", val: pace, set: setPace },
-                { key: "CHU", val: sho, set: setSho },
-                { key: "PAS", val: pas, set: setPas },
-                { key: "DEF", val: def, set: setDef },
-                { key: "FIS", val: phy, set: setPhy },
-              ].map((x) => (
-                <div key={x.key} className="w-[68px] space-y-1">
-                  <div className="text-[10px] font-semibold text-muted-foreground text-center">
-                    {x.key}
-                  </div>
-                  <Input
-                    className="h-9 px-2 text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    type="number"
-                    min={0}
-                    max={99}
-                    value={x.val}
-                    onChange={(e) => x.set(+e.target.value)}
-                    disabled={!canEdit}
-                  />
-                </div>
-              ))}
-            </div>
-
             <Button className="w-full" onClick={save} disabled={!canEdit} type="button">
               Salvar card do jogador
             </Button>
@@ -293,6 +276,7 @@ export default function GroupPage() {
   // PIN
   const [pinInput, setPinInput] = useState("");
   const [canEdit, setCanEdit] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
 
   // UI
   const [listTab, setListTab] = useState<"FIXO" | "COMPLETE">("FIXO");
@@ -325,6 +309,7 @@ export default function GroupPage() {
     if (ok) {
       localStorage.setItem(pinKey(groupId), pinInput);
       setCanEdit(true);
+      setPinOpen(false);
     } else {
       setCanEdit(false);
       alert("PIN incorreto.");
@@ -335,6 +320,7 @@ export default function GroupPage() {
     localStorage.removeItem(pinKey(groupId));
     setPinInput("");
     setCanEdit(false);
+    setPinOpen(false);
   }
 
   async function loadPlayers() {
@@ -446,38 +432,60 @@ export default function GroupPage() {
   const completes = useMemo(() => players.filter((p) => p.type === "COMPLETE"), [players]);
   const list = listTab === "FIXO" ? fixes : completes;
 
+  const tabHint =
+    listTab === "FIXO"
+      ? "Fixos: jogadores do grupo (normalmente sempre disponíveis)."
+      : "Completes: reservas/convidados (entram quando faltar).";
+
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* header sticky menos denso */}
+      {/* Header sticky bem baixo no mobile */}
       <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
+        <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="text-xs text-muted-foreground">Grupo</div>
-              <div className="text-xl font-black leading-tight">Painel</div>
+              <div className="flex items-center gap-2">
+                <div className="text-xl font-black leading-tight truncate">Painel</div>
+                <Badge variant={canEdit ? "secondary" : "outline"}>
+                  {canEdit ? "Edição liberada" : "Somente leitura"}
+                </Badge>
+              </div>
             </div>
 
-            {/* Desktop: mantém botões. Mobile: vira menu "Mais" */}
-            <div className="hidden sm:flex gap-2">
-              <Button asChild variant="outline">
+            {/* Desktop */}
+            <div className="hidden sm:flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2"
+                onClick={() => setPinOpen(true)}
+              >
+                <KeyRound className="h-4 w-4" />
+                PIN
+              </Button>
+              <Button asChild variant="outline" size="sm" className="h-9">
                 <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" size="sm" className="h-9">
                 <Link href="/">Voltar</Link>
               </Button>
             </div>
 
+            {/* Mobile: menu com ícone */}
             <div className="sm:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 px-3">
-                    Mais
+                  <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Mais opções">
+                    <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setPinOpen(true)}>PIN / Edição</DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
                     <Link href="/">Voltar</Link>
                   </DropdownMenuItem>
@@ -485,82 +493,100 @@ export default function GroupPage() {
               </DropdownMenu>
             </div>
           </div>
-
-          <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-            <CardContent className="p-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="text-sm text-muted-foreground">
-                  Edição:{" "}
-                  <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
-                </div>
-
-                <Input
-                  type="password"
-                  className="w-40"
-                  placeholder="PIN do grupo"
-                  value={pinInput}
-                  onChange={(e) => setPinInput(e.target.value)}
-                />
-
-                <Button onClick={unlockEdit}>Liberar</Button>
-                <Button variant="outline" onClick={lockEdit}>
-                  Bloquear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {lastMatch && (
-            <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-              <CardContent className="p-3 flex items-center justify-between flex-wrap gap-2">
-                <div className="text-sm">
-                  Última partida em andamento: <b>{lastMatch.team_a_name}</b> vs{" "}
-                  <b>{lastMatch.team_b_name}</b> (Rodada {lastMatch.seq})
-                </div>
-                <div className="flex gap-2">
-                  <Button asChild variant="outline">
-                    <Link href={`/match/${lastMatch.id}/setup`}>Setup</Link>
-                  </Button>
-                  <Button asChild>
-                    <Link href={`/match/${lastMatch.id}/live`}>Retomar ao vivo</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* mantém a grid, mas header com menos padding e menos space-y */}
-          <div className="grid md:grid-cols-3 gap-2">
-            <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
-              Criar encontro + partida
-            </Button>
-
-            <Button asChild variant="outline" className="h-12" disabled={!matchId}>
-              <Link href={matchId ? `/match/${matchId}/setup` : "#"} aria-disabled={!matchId}>
-                Setup da partida
-              </Link>
-            </Button>
-
-            <Button asChild variant="outline" className="h-12" disabled={!matchId}>
-              <Link href={matchId ? `/match/${matchId}/live` : "#"} aria-disabled={!matchId}>
-                Abrir ao vivo
-              </Link>
-            </Button>
-          </div>
-
-          {meetingId && (
-            <div className="text-sm">
-              <Link className="underline" href={`/meeting/${meetingId}`}>
-                Ver resumo do encontro (craque do dia)
-              </Link>
-            </div>
-          )}
         </div>
       </div>
 
+      {/* Dialog de PIN (tira o “card flutuante” do header) */}
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>PIN do grupo</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Status: <b className="text-foreground">{canEdit ? "Edição liberada" : "Somente leitura"}</b>
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-muted-foreground">PIN</div>
+              <Input
+                type="password"
+                placeholder="Digite o PIN"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={unlockEdit} className="flex-1">
+                Liberar edição
+              </Button>
+              <Button variant="outline" onClick={lockEdit} className="flex-1">
+                Bloquear
+              </Button>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              Dica: após liberar, o PIN fica salvo no seu navegador (localStorage).
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        {/* Seção Partida (separada dos Jogadores) */}
         <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
           <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-lg">Partida</CardTitle>
+              <Badge variant="outline">{lastMatch ? "em andamento" : "nenhuma em andamento"}</Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-3">
+            {lastMatch ? (
+              <div className="text-sm">
+                Em andamento: <b>{lastMatch.team_a_name}</b> vs <b>{lastMatch.team_b_name}</b> (Rodada{" "}
+                {lastMatch.seq})
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                Nenhuma partida em andamento. Crie um encontro para começar.
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-3 gap-2">
+              <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
+                Criar encontro + partida
+              </Button>
+
+              <Button asChild variant="outline" className="h-12" disabled={!matchId}>
+                <Link href={matchId ? `/match/${matchId}/setup` : "#"} aria-disabled={!matchId}>
+                  Setup da partida
+                </Link>
+              </Button>
+
+              <Button asChild variant="outline" className="h-12" disabled={!matchId}>
+                <Link href={matchId ? `/match/${matchId}/live` : "#"} aria-disabled={!matchId}>
+                  Abrir ao vivo
+                </Link>
+              </Button>
+            </div>
+
+            {meetingId && (
+              <div className="text-sm">
+                <Link className="underline" href={`/meeting/${meetingId}`}>
+                  Ver resumo do encontro (craque do dia)
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Seção Jogadores */}
+        <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+          <CardHeader className="pb-3 space-y-2">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <CardTitle className="text-lg">Jogadores</CardTitle>
 
@@ -571,14 +597,14 @@ export default function GroupPage() {
                 </TabsList>
               </Tabs>
             </div>
+
+            <div className="text-xs text-muted-foreground">{tabHint}</div>
           </CardHeader>
 
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-4 gap-2">
               <div className="md:col-span-2">
-                <div className="text-xs font-semibold text-muted-foreground mb-1">
-                  Nome do jogador
-                </div>
+                <div className="text-xs font-semibold text-muted-foreground mb-1">Nome do jogador</div>
                 <Input
                   placeholder="Ex: Renan"
                   value={playerName}
@@ -593,8 +619,8 @@ export default function GroupPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="FIXO">FIXO</SelectItem>
-                    <SelectItem value="COMPLETE">COMPLETE</SelectItem>
+                    <SelectItem value="FIXO">Fixo</SelectItem>
+                    <SelectItem value="COMPLETE">Complete</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -603,9 +629,7 @@ export default function GroupPage() {
                 <div className="text-xs font-semibold text-muted-foreground mb-1">Posição</div>
                 <Select
                   value={playerPos || "__none__"}
-                  onValueChange={(v) =>
-                    setPlayerPos((v === "__none__" ? "" : (v as Pos)) as any)
-                  }
+                  onValueChange={(v) => setPlayerPos((v === "__none__" ? "" : (v as Pos)) as any)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="(sem)" />
@@ -634,18 +658,14 @@ export default function GroupPage() {
               )}
             </div>
 
+            <Separator />
+
             {list.length === 0 ? (
               <div className="text-sm text-muted-foreground">Sem jogadores.</div>
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {list.map((p) => (
-                  <PlayerCard
-                    key={p.id}
-                    p={p}
-                    canEdit={canEdit}
-                    pinInput={pinInput}
-                    onSaved={loadPlayers}
-                  />
+                  <PlayerCard key={p.id} p={p} canEdit={canEdit} pinInput={pinInput} onSaved={loadPlayers} />
                 ))}
               </div>
             )}

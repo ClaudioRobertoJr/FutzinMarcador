@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { Share2, ChevronRight } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ function StatBox({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl border px-3 py-2">
       <div className="text-[10px] font-semibold text-muted-foreground">{label}</div>
-      <div className="text-lg font-black">{value}</div>
+      <div className="text-lg font-black tabular-nums">{value}</div>
     </div>
   );
 }
@@ -120,7 +121,6 @@ function ShareTop5CardCapture({
           background: "rgba(255,255,255,0.04)",
         }}
       >
-        {/* header */}
         <div
           style={{
             display: "grid",
@@ -188,10 +188,7 @@ export default function MeetingPage() {
   const [meetingStartsAt, setMeetingStartsAt] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
-  // cores dos times por rodada (para dots)
-  const [matchMetaById, setMatchMetaById] = useState<
-    Record<string, { colorA: string; colorB: string }>
-  >({});
+  const [matchMetaById, setMatchMetaById] = useState<Record<string, { colorA: string; colorB: string }>>({});
 
   async function loadGroupId() {
     const { data, error } = await supabase
@@ -209,7 +206,6 @@ export default function MeetingPage() {
     if (e1) return alert(e1.message);
     setMatches((ms ?? []) as any);
 
-    // carrega cores dos times por match (para dots nos cards de rodada)
     const matchIds = (ms ?? []).map((m: any) => m.match_id).filter(Boolean);
     if (matchIds.length) {
       const { data: metas, error: em } = await supabase
@@ -267,15 +263,15 @@ export default function MeetingPage() {
   const top5 = useMemo(() => stats.slice(0, 5), [stats]);
 
   function exportCSV() {
-    const hasGA = stats.some((s) => typeof s.goals_against === "number");
-    const header = hasGA
+    const hasGA2 = stats.some((s) => typeof s.goals_against === "number");
+    const header = hasGA2
       ? ["Jogador", "Gols", "Assists", "Defesas", "DD", "GA", "Pontos"]
       : ["Jogador", "Gols", "Assists", "Defesas", "DD", "Pontos"];
 
     const rows = stats.map((s) => {
       const dd = Number(s.hard_saves ?? 0);
       const ga = Number(s.goals_against ?? 0);
-      return hasGA
+      return hasGA2
         ? [s.player_name, s.goals, s.assists, s.saves, dd, ga, s.points]
         : [s.player_name, s.goals, s.assists, s.saves, dd, s.points];
     });
@@ -357,7 +353,6 @@ export default function MeetingPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Sticky agora é SÓ a barra superior */}
       <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -386,10 +381,10 @@ export default function MeetingPage() {
         </div>
       </div>
 
-      {/* Conteúdo normal (não fica por baixo do sticky) */}
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        {/* MVP com contraste bom no dark: fundo amarelo + ring */}
         {mvp && (
-          <Card className="border-yellow-400 bg-yellow-50/10 shadow-sm">
+          <Card className="border-yellow-400/60 bg-yellow-500/10 shadow-sm ring-1 ring-yellow-500/20">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -404,7 +399,8 @@ export default function MeetingPage() {
             <CardContent className="space-y-3">
               <div className="text-2xl font-black">{mvp.player_name}</div>
 
-              <div className="flex gap-2 flex-wrap">
+              {/* Stats em grid (não quebra feio no mobile) */}
+              <div className={cn("grid gap-2", hasGA ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5")}>
                 <StatBox label="Pontos" value={mvp.points} />
                 <StatBox label="Gols" value={mvp.goals} />
                 <StatBox label="Assists" value={mvp.assists} />
@@ -413,33 +409,37 @@ export default function MeetingPage() {
                 {typeof mvp.goals_against === "number" && <StatBox label="GA" value={mvp.goals_against ?? 0} />}
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                Critério: points = (G*2) + (A*1) + (D*0.25) + (DD*1).
-              </div>
+              <div className="text-xs text-muted-foreground">Critério: points = (G*2) + (A*1) + (D*0.25) + (DD*1).</div>
             </CardContent>
           </Card>
         )}
 
-        {/* Share (botão destacado fora do header, tamanho lg) */}
+        {/* Share destacado (ação importante) */}
         {top5.length > 0 && (
-          <Card>
+          <Card className="border-primary/20 bg-primary/5">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Resumo para compartilhar (Top 5)</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base">Compartilhar Top 5</CardTitle>
+                <Badge variant="outline" className="text-muted-foreground">
+                  PNG 1080×1080
+                </Badge>
+              </div>
             </CardHeader>
 
             <CardContent className="space-y-3">
               <div className="text-sm text-muted-foreground">
-                Gera uma imagem 1080×1080 (legível) e abre o compartilhamento no celular.
+                Gera uma imagem legível para WhatsApp e abre o compartilhamento no celular.
               </div>
 
-              <Button
-                size="lg"
-                className="w-full min-h-[48px]"
-                onClick={shareTop5PNG}
-                disabled={sharing}
-              >
+              <Button size="lg" className="w-full min-h-[48px] gap-2" onClick={shareTop5PNG} disabled={sharing}>
+                <Share2 className="h-4 w-4" />
                 {sharing ? "Gerando..." : "Compartilhar PNG (Top 5)"}
               </Button>
+
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                Dica: se o share do navegador não abrir, o app baixa a imagem automaticamente.
+                <ChevronRight className="h-3 w-3" />
+              </div>
             </CardContent>
           </Card>
         )}
@@ -520,7 +520,7 @@ export default function MeetingPage() {
                           <div className="font-black">{s.points} pts</div>
                         </div>
 
-                        <div className={cn("grid gap-2", hasGA ? "grid-cols-6" : "grid-cols-5")}>
+                        <div className={cn("grid gap-2", hasGA ? "grid-cols-3" : "grid-cols-3")}>
                           <StatBox label="G" value={s.goals} />
                           <StatBox label="A" value={s.assists} />
                           <StatBox label="D" value={s.saves} />
@@ -533,35 +533,44 @@ export default function MeetingPage() {
                   ))}
                 </div>
 
-                <div className="hidden md:block overflow-auto">
-                  <table className="min-w-[920px] w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="py-2 pr-3">#</th>
-                        <th className="py-2 pr-3">Jogador</th>
-                        <th className="py-2 pr-3">Gols</th>
-                        <th className="py-2 pr-3">Assists</th>
-                        <th className="py-2 pr-3">Defesas</th>
-                        <th className="py-2 pr-3">DD</th>
-                        {hasGA && <th className="py-2 pr-3">GA</th>}
-                        <th className="py-2 pr-3">Pontos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats.map((s, idx) => (
-                        <tr key={s.player_id} className={cn("border-b", idx === 0 && "bg-muted/40")}>
-                          <td className="py-2 pr-3 font-semibold">{idx + 1}</td>
-                          <td className="py-2 pr-3 font-black">{s.player_name}</td>
-                          <td className="py-2 pr-3">{s.goals}</td>
-                          <td className="py-2 pr-3">{s.assists}</td>
-                          <td className="py-2 pr-3">{s.saves}</td>
-                          <td className="py-2 pr-3">{Number(s.hard_saves ?? 0)}</td>
-                          {hasGA && <td className="py-2 pr-3">{s.goals_against ?? 0}</td>}
-                          <td className="py-2 pr-3 font-black">{s.points}</td>
+                {/* Desktop table com indicador de scroll */}
+                <div className="hidden md:block relative">
+                  {/* sombras laterais indicam scroll horizontal */}
+                  <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-background to-transparent" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[920px] w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b text-muted-foreground">
+                          <th className="py-2 pr-3">#</th>
+                          <th className="py-2 pr-3">Jogador</th>
+                          <th className="py-2 pr-3">Gols</th>
+                          <th className="py-2 pr-3">Assists</th>
+                          <th className="py-2 pr-3">Defesas</th>
+                          <th className="py-2 pr-3">DD</th>
+                          {hasGA && <th className="py-2 pr-3">GA</th>}
+                          <th className="py-2 pr-3">Pontos</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {stats.map((s, idx) => (
+                          <tr key={s.player_id} className={cn("border-b", idx === 0 && "bg-muted/40")}>
+                            <td className="py-2 pr-3 font-semibold">{idx + 1}</td>
+                            <td className="py-2 pr-3 font-black">{s.player_name}</td>
+                            <td className="py-2 pr-3">{s.goals}</td>
+                            <td className="py-2 pr-3">{s.assists}</td>
+                            <td className="py-2 pr-3">{s.saves}</td>
+                            <td className="py-2 pr-3">{Number(s.hard_saves ?? 0)}</td>
+                            {hasGA && <td className="py-2 pr-3">{s.goals_against ?? 0}</td>}
+                            <td className="py-2 pr-3 font-black">{s.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-2 text-xs text-muted-foreground">Dica: role horizontalmente para ver todas as colunas.</div>
                 </div>
 
                 <Separator className="my-4" />

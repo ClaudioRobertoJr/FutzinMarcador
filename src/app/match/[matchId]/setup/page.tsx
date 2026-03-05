@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { ChevronDown, ChevronUp, Search, Trash2 } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -69,22 +70,22 @@ function TeamMetaCard({
             <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: color }} />
             <span className="truncate">{title}</span>
             {badge ? (
-              <span className="text-xs font-semibold text-muted-foreground truncate">
-                • {badge}
-              </span>
+              <span className="text-xs font-semibold text-muted-foreground truncate">• {badge}</span>
             ) : null}
           </CardTitle>
 
-          {/* Mobile: colapsável */}
+          {/* Mobile: colapsável (com chevron) */}
           <Button
             variant="outline"
             size="sm"
-            className="h-9 md:hidden"
+            className="h-9 gap-1 md:hidden"
             onClick={onToggle}
             type="button"
             disabled={!canEdit || !!disabled}
+            aria-expanded={isOpen}
           >
-            {isOpen ? "Fechar" : "Editar"}
+            <span>{isOpen ? "Fechar" : "Editar"}</span>
+            {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
         </div>
       </CardHeader>
@@ -107,7 +108,7 @@ function TeamMetaCard({
             value={color}
             onChange={(e) => setColor(e.target.value)}
             disabled={!canEdit || !!disabled}
-            className="h-9 w-14 rounded-md border bg-transparent"
+            className="h-11 w-16 rounded-md border bg-transparent"
           />
         </div>
 
@@ -116,7 +117,7 @@ function TeamMetaCard({
           onClick={onUseFirst}
           type="button"
           disabled={!canEdit || !!disabled}
-          className="w-full"
+          className="w-full h-11"
         >
           Usar 1º jogador
         </Button>
@@ -296,7 +297,7 @@ export default function MatchSetupPage() {
     setPicks((prev) => prev.filter((p) => p.player_id !== playerId));
   }
 
-  function toggleState(playerId: string) {
+  function setState(playerId: string, nextState: "ON_COURT" | "BENCH") {
     if (!canEdit) return;
     if (!match) return;
 
@@ -304,15 +305,10 @@ export default function MatchSetupPage() {
       const item = prev.find((p) => p.player_id === playerId);
       if (!item) return prev;
       if (item.side === "C") return prev; // C sempre banco
+      if (item.state === nextState) return prev;
 
       const limit = match.on_court;
-
-      const currentOn =
-        item.side === "A"
-          ? prev.filter((p) => p.side === "A" && p.state === "ON_COURT").length
-          : prev.filter((p) => p.side === "B" && p.state === "ON_COURT").length;
-
-      const nextState = item.state === "ON_COURT" ? "BENCH" : "ON_COURT";
+      const currentOn = prev.filter((p) => p.side === item.side && p.state === "ON_COURT").length;
 
       if (nextState === "ON_COURT" && currentOn >= limit) {
         alert(`Máximo em quadra por time: ${limit}`);
@@ -443,10 +439,10 @@ export default function MatchSetupPage() {
               value={pinInput}
               onChange={(e) => setPinInput(e.target.value)}
             />
-            <Button onClick={unlockEdit} type="button">
+            <Button onClick={unlockEdit} type="button" className="h-11">
               Liberar
             </Button>
-            <Button variant="outline" onClick={lockEdit} type="button">
+            <Button variant="outline" onClick={lockEdit} type="button" className="h-11">
               Bloquear
             </Button>
 
@@ -505,9 +501,9 @@ export default function MatchSetupPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 min-w-0">
                 <span className="h-3 w-3 rounded-full border" style={{ background: teamColor(tab) }} />
-                {teamLabel(tab)}
+                <span className="truncate">{teamLabel(tab)}</span>
               </CardTitle>
               <Badge variant="outline">{currentTeam.length} jogador(es)</Badge>
             </div>
@@ -517,32 +513,57 @@ export default function MatchSetupPage() {
             {currentTeam.length === 0 ? (
               <div className="text-sm text-muted-foreground">Sem jogadores neste time.</div>
             ) : (
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
                 {currentTeam.map((p) => (
-                  <div key={p.player_id} className="rounded-2xl border px-3 py-2 flex items-center gap-2">
-                    <div className="font-semibold">{p.name}</div>
+                  <div
+                    key={p.player_id}
+                    className="rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                  >
+                    <div className="font-semibold leading-tight truncate" title={p.name}>
+                      {p.name}
+                    </div>
 
-                    {tab !== "C" && (
+                    {/* Controles com alvo >= 44px */}
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      {tab !== "C" ? (
+                        <>
+                          <Button
+                            type="button"
+                            className="h-11"
+                            variant={p.state === "ON_COURT" ? "default" : "outline"}
+                            onClick={() => setState(p.player_id, "ON_COURT")}
+                            disabled={!canEdit}
+                          >
+                            QUADRA
+                          </Button>
+                          <Button
+                            type="button"
+                            className="h-11"
+                            variant={p.state === "BENCH" ? "default" : "outline"}
+                            onClick={() => setState(p.player_id, "BENCH")}
+                            disabled={!canEdit}
+                          >
+                            BANCO
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary" className="h-11 px-3 flex items-center">
+                          Sempre banco
+                        </Badge>
+                      )}
+
                       <Button
-                        variant={p.state === "ON_COURT" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleState(p.player_id)}
                         type="button"
+                        variant="outline"
+                        className="h-11 w-11 p-0"
+                        onClick={() => removePick(p.player_id)}
                         disabled={!canEdit}
+                        aria-label="Remover jogador"
+                        title="Remover"
                       >
-                        {p.state === "ON_COURT" ? "QUADRA" : "BANCO"}
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    )}
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removePick(p.player_id)}
-                      type="button"
-                      disabled={!canEdit}
-                    >
-                      Remover
-                    </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -560,11 +581,9 @@ export default function MatchSetupPage() {
             <CardTitle className="text-base">Adicionar jogador</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* busca com ícone */}
+            {/* busca com ícone Lucide (sem emoji) */}
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                🔍
-              </span>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 className="pl-9"
                 placeholder="Buscar jogador..."
@@ -576,13 +595,13 @@ export default function MatchSetupPage() {
             {filteredAvailable.length === 0 ? (
               <div className="text-sm text-muted-foreground">Sem disponíveis.</div>
             ) : (
-              <div className="max-h-48 overflow-y-auto pr-1">
+              <div className="max-h-56 overflow-y-auto pr-1">
                 <div className="flex flex-wrap gap-2">
                   {filteredAvailable.map((p) => (
                     <Button
                       key={p.id}
                       variant="outline"
-                      className="rounded-full"
+                      className="rounded-full h-11"
                       onClick={() => addTo(tab, p.id)}
                       disabled={!canEdit}
                       type="button"

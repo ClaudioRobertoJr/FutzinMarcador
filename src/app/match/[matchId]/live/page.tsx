@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { Search } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -49,8 +50,11 @@ type RecentEvent = {
 
 const CARD_SURFACE =
   "border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:bg-card hover:shadow-md transition";
-const CARD_SURFACE_STATIC =
-  "border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60";
+const CARD_SURFACE_STATIC = "border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60";
+
+function cn(...xs: Array<string | false | null | undefined>) {
+  return xs.filter(Boolean).join(" ");
+}
 
 function hexToRgb(hex: string) {
   const h = hex.replace("#", "");
@@ -259,7 +263,7 @@ export default function LiveMatchPage() {
   async function loadRecentEvents() {
     const { data, error } = await supabase.rpc("get_match_recent_events", {
       p_match_id: matchId,
-      p_limit: 10,
+      p_limit: 30, // aumenta para o log ficar útil com scroll
     });
     if (error) return;
 
@@ -275,7 +279,10 @@ export default function LiveMatchPage() {
     }
     if (ids.size === 0) return;
 
-    const { data: ps, error: ep } = await supabase.from("players").select("id,name").in("id", Array.from(ids));
+    const { data: ps, error: ep } = await supabase
+      .from("players")
+      .select("id,name")
+      .in("id", Array.from(ids));
     if (ep) return;
 
     const map: Record<string, string> = {};
@@ -284,7 +291,11 @@ export default function LiveMatchPage() {
   }
 
   async function loadGroupAndValidatePin() {
-    const { data: ma, error: ema } = await supabase.from("matches").select("meeting_id").eq("id", matchId).single();
+    const { data: ma, error: ema } = await supabase
+      .from("matches")
+      .select("meeting_id")
+      .eq("id", matchId)
+      .single();
     if (ema) return alert(ema.message);
 
     const { data: meet, error: em } = await supabase
@@ -559,6 +570,11 @@ export default function LiveMatchPage() {
     return `${fmtTime(e.created_at)} • ${e.type}${undone}`;
   }
 
+  const playerBtnBase = "rounded-full min-h-[44px] px-4 justify-start";
+  const playerBtnSelected =
+    "bg-primary text-primary-foreground border-primary ring-2 ring-primary ring-offset-2 ring-offset-background shadow-sm";
+  const playerBtnUnselected = "bg-background/60 hover:bg-muted/50";
+
   const TeamPanel = ({
     side,
     title,
@@ -599,24 +615,35 @@ export default function LiveMatchPage() {
     return (
       <Card className={CARD_SURFACE}>
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full border" style={{ background: color }} />
-                <CardTitle className="text-lg">{title}</CardTitle>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Em quadra: {onCourt.length} · Banco: {bench.length}
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-3 rounded-full border" style={{ background: color }} />
+                  <CardTitle className="text-lg truncate">{title}</CardTitle>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Em quadra: {onCourt.length} · Banco: {bench.length}
+                </div>
               </div>
             </div>
 
+            {/* Tabs com scroll no mobile (<360px) */}
             <Tabs value={mode} onValueChange={(v) => setMode(v as TeamMode)}>
-              <TabsList>
-                <TabsTrigger value="GOAL">Gol</TabsTrigger>
-                <TabsTrigger value="SAVE">Defesa</TabsTrigger>
-                <TabsTrigger value="SAVE_HARD">Difícil</TabsTrigger>
-                <TabsTrigger value="SUB">Sub</TabsTrigger>
-              </TabsList>
+              <div className="-mx-1 overflow-x-auto">
+                <TabsList className="w-max min-w-full md:w-auto">
+                  <TabsTrigger value="GOAL">Gol</TabsTrigger>
+                  <TabsTrigger value="SAVE">
+                    <span className="min-[360px]:inline hidden">Defesa</span>
+                    <span className="min-[360px]:hidden inline">Def</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="SAVE_HARD">
+                    <span className="min-[360px]:inline hidden">Difícil</span>
+                    <span className="min-[360px]:hidden inline">Dif</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="SUB">Sub</TabsTrigger>
+                </TabsList>
+              </div>
             </Tabs>
           </div>
         </CardHeader>
@@ -636,8 +663,9 @@ export default function LiveMatchPage() {
                   <Button
                     key={p.player_id}
                     type="button"
-                    variant={selected ? "default" : "outline"}
-                    className="rounded-full min-h-[44px]"
+                    variant="outline"
+                    aria-pressed={selected}
+                    className={cn(playerBtnBase, selected ? playerBtnSelected : playerBtnUnselected)}
                     onClick={() => {
                       if (mode === "GOAL") {
                         if (!scorer || scorer !== p.player_id) {
@@ -659,7 +687,7 @@ export default function LiveMatchPage() {
                       }
                     }}
                   >
-                    {name}
+                    <span className="truncate max-w-[220px]">{name}</span>
                   </Button>
                 );
               })}
@@ -672,8 +700,9 @@ export default function LiveMatchPage() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant={!assist ? "default" : "outline"}
-                  className="rounded-full min-h-[44px]"
+                  variant="outline"
+                  aria-pressed={!assist}
+                  className={cn(playerBtnBase, !assist ? playerBtnSelected : playerBtnUnselected)}
                   onClick={() => setAssist("")}
                 >
                   Sem assist
@@ -681,17 +710,21 @@ export default function LiveMatchPage() {
 
                 {onCourt
                   .filter((p) => p.player_id !== scorer)
-                  .map((p) => (
-                    <Button
-                      key={p.player_id}
-                      type="button"
-                      variant={assist === p.player_id ? "default" : "outline"}
-                      className="rounded-full min-h-[44px]"
-                      onClick={() => setAssist(assist === p.player_id ? "" : p.player_id)}
-                    >
-                      {p.players?.name ?? p.player_id}
-                    </Button>
-                  ))}
+                  .map((p) => {
+                    const selected = assist === p.player_id;
+                    return (
+                      <Button
+                        key={p.player_id}
+                        type="button"
+                        variant="outline"
+                        aria-pressed={selected}
+                        className={cn(playerBtnBase, selected ? playerBtnSelected : playerBtnUnselected)}
+                        onClick={() => setAssist(selected ? "" : p.player_id)}
+                      >
+                        <span className="truncate max-w-[220px]">{p.players?.name ?? p.player_id}</span>
+                      </Button>
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -700,17 +733,21 @@ export default function LiveMatchPage() {
             <div className="space-y-2">
               <div className="text-xs font-black">BANCO</div>
               <div className="flex flex-wrap gap-2">
-                {bench.map((p) => (
-                  <Button
-                    key={p.player_id}
-                    type="button"
-                    variant={subIn === p.player_id ? "default" : "outline"}
-                    className="rounded-full min-h-[44px]"
-                    onClick={() => setSubIn(subIn === p.player_id ? "" : p.player_id)}
-                  >
-                    {p.players?.name ?? p.player_id}
-                  </Button>
-                ))}
+                {bench.map((p) => {
+                  const selected = subIn === p.player_id;
+                  return (
+                    <Button
+                      key={p.player_id}
+                      type="button"
+                      variant="outline"
+                      aria-pressed={selected}
+                      className={cn(playerBtnBase, selected ? playerBtnSelected : playerBtnUnselected)}
+                      onClick={() => setSubIn(selected ? "" : p.player_id)}
+                    >
+                      <span className="truncate max-w-[220px]">{p.players?.name ?? p.player_id}</span>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -786,23 +823,21 @@ export default function LiveMatchPage() {
           <div className="space-y-2">
             <div className="text-xs font-black">STATS (EM QUADRA)</div>
 
-            {/* sempre 2 colunas */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* 1 coluna em telas muito estreitas; 2 colunas a partir de ~360px */}
+            <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
               {onCourt.map((p) => {
-                const s =
-                  stats[p.player_id] ??
-                  ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as any);
+                const s = stats[p.player_id] ?? ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as any);
                 const name = p.players?.name ?? p.player_id;
 
                 return (
                   <Card key={p.player_id} className={CARD_SURFACE_STATIC}>
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="font-black leading-tight line-clamp-2">{name}</div>
+                        <div className="font-black leading-tight line-clamp-2 break-words">{name}</div>
                         <Badge variant="secondary">{p.players?.preferred_pos ?? "-"}</Badge>
                       </div>
 
-                      <div className="mt-2 flex gap-2">
+                      <div className="mt-2 flex gap-2 flex-wrap">
                         <StatMini label="G" value={s.goals ?? 0} />
                         <StatMini label="A" value={s.assists ?? 0} />
                         <StatMini label="D" value={s.saves ?? 0} />
@@ -821,66 +856,79 @@ export default function LiveMatchPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Header sticky (reduzido) */}
+      {/* Header sticky (menos denso no mobile) */}
       <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
-        <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-xs text-muted-foreground">
-                Partida ao vivo
-                {matchInfo.seq != null && (
-                  <>
-                    {" "}
-                    • Rodada <b className="text-foreground">{matchInfo.seq}</b>
-                  </>
-                )}
-                {matchInfo.status && (
-                  <>
-                    {" "}
-                    • <b className="text-foreground">{statusLabel(matchInfo.status)}</b>
-                  </>
-                )}
+        <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
+          <div className="text-xs text-muted-foreground">
+            Partida ao vivo
+            {matchInfo.seq != null && (
+              <>
+                {" "}
+                • Rodada <b className="text-foreground">{matchInfo.seq}</b>
+              </>
+            )}
+            {matchInfo.status && (
+              <>
+                {" "}
+                • <b className="text-foreground">{statusLabel(matchInfo.status)}</b>
+              </>
+            )}
+          </div>
+
+          {/* placar em 2 linhas (evita sobreposição) + timer ao lado no desktop */}
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="space-y-1">
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: meta.colorA }} />
+                  <div className="font-black truncate">{meta.teamA}</div>
+                </div>
+                <div className="flex items-center justify-end gap-2 min-w-0">
+                  <div className="font-black truncate text-right">{meta.teamB}</div>
+                  <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: meta.colorB }} />
+                </div>
               </div>
 
-              {/* placar menor no mobile */}
-              <div className="text-2xl sm:text-3xl font-black tracking-tight">
-                {meta.teamA} {scoreA} <span className="text-muted-foreground">x</span> {scoreB} {meta.teamB}
+              <div className="flex items-center justify-center gap-3">
+                <div className="text-5xl sm:text-4xl font-black tabular-nums">{scoreA}</div>
+                <div className="text-muted-foreground text-2xl font-black">x</div>
+                <div className="text-5xl sm:text-4xl font-black tabular-nums">{scoreB}</div>
               </div>
             </div>
 
-            <Card className={CARD_SURFACE_STATIC}>
+            <Card className={cn(CARD_SURFACE_STATIC, "w-full sm:w-[260px]")}>
               <CardContent className="p-2">
-                <div className="flex items-center gap-2">
-                  <div className="font-black tabular-nums">{fmt(timerMs)}</div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="min-h-[36px]"
-                    onClick={() => setTimerRunning((v) => !v)}
-                  >
-                    {timerRunning ? "Pausar" : "Iniciar"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="min-h-[36px]"
-                    onClick={() => setTimerMs(0)}
-                  >
-                    Zerar
-                  </Button>
+                <div className="text-[10px] font-semibold text-muted-foreground">TEMPO</div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className="font-black tabular-nums text-xl">{fmt(timerMs)}</div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[36px]"
+                      onClick={() => setTimerRunning((v) => !v)}
+                      type="button"
+                    >
+                      {timerRunning ? "Pausar" : "Iniciar"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[36px]"
+                      onClick={() => setTimerMs(0)}
+                      type="button"
+                    >
+                      Zerar
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* ações: sem scroll horizontal; críticos destacados */}
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="destructive"
-              className="min-h-[44px]"
-              onClick={endThisMatch}
-              disabled={!canEdit}
-            >
+          {/* ações em grid (sem esmagar o topo) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <Button variant="destructive" className="min-h-[44px]" onClick={endThisMatch} disabled={!canEdit}>
               Encerrar
             </Button>
 
@@ -893,13 +941,13 @@ export default function LiveMatchPage() {
               Desfazer
             </Button>
 
-            <Button className="min-h-[44px]" onClick={nextRoundSameTeams} disabled={!canEdit}>
+            <Button className="min-h-[44px] col-span-2 sm:col-span-1" onClick={nextRoundSameTeams} disabled={!canEdit}>
               Próxima
             </Button>
 
             {hasTeamC && (
               <Button
-                className="col-span-3 min-h-[44px]"
+                className="col-span-2 sm:col-span-3 min-h-[44px]"
                 variant="outline"
                 onClick={() => setShowRotation((v) => !v)}
               >
@@ -940,10 +988,10 @@ export default function LiveMatchPage() {
                 onChange={(e) => setPinInput(e.target.value)}
               />
 
-              <Button className="min-h-[44px]" onClick={unlockEdit}>
+              <Button className="min-h-[44px]" onClick={unlockEdit} type="button">
                 Liberar
               </Button>
-              <Button className="min-h-[44px]" variant="outline" onClick={lockEdit}>
+              <Button className="min-h-[44px]" variant="outline" onClick={lockEdit} type="button">
                 Bloquear
               </Button>
 
@@ -1023,44 +1071,45 @@ export default function LiveMatchPage() {
           <div className="relative grid grid-cols-2">
             <div style={{ background: meta.colorA, color: contrastText(meta.colorA) }} className="p-5">
               <div className="text-sm font-black opacity-90">Time A</div>
-              <div className="text-2xl font-black leading-tight">{meta.teamA}</div>
+              <div className="text-2xl font-black leading-tight truncate">{meta.teamA}</div>
               <div className="mt-2 text-5xl font-black tabular-nums">{scoreA}</div>
             </div>
 
             <div style={{ background: meta.colorB, color: contrastText(meta.colorB) }} className="p-5 text-right">
               <div className="text-sm font-black opacity-90">Time B</div>
-              <div className="text-2xl font-black leading-tight">{meta.teamB}</div>
+              <div className="text-2xl font-black leading-tight truncate">{meta.teamB}</div>
               <div className="mt-2 text-5xl font-black tabular-nums">{scoreB}</div>
             </div>
 
-            {/* linha + círculo mais grossos no mobile */}
             <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-white/70" />
             <div className="pointer-events-none absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white/70" />
           </div>
         </Card>
 
-        {/* Últimos eventos */}
+        {/* Últimos eventos (com min-height + scroll útil no mobile) */}
         <Card className={CARD_SURFACE}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Últimos eventos</CardTitle>
-              <Button variant="outline" size="sm" className="min-h-[36px]" onClick={loadRecentEvents}>
+              <CardTitle className="text-base">Log de eventos</CardTitle>
+              <Button variant="outline" size="sm" className="min-h-[36px]" onClick={loadRecentEvents} type="button">
                 Atualizar
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            {recent.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Sem eventos ainda.</div>
-            ) : (
-              <ul className="space-y-1">
-                {recent.map((e) => (
-                  <li key={e.id} className="text-sm">
-                    {renderEvent(e)}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <div className="min-h-[220px] max-h-[40vh] overflow-y-auto pr-1">
+              {recent.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Sem eventos ainda.</div>
+              ) : (
+                <ul className="space-y-1">
+                  {recent.map((e) => (
+                    <li key={e.id} className="text-sm">
+                      {renderEvent(e)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1168,12 +1217,13 @@ export default function LiveMatchPage() {
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1 min-h-[44px]" onClick={() => setConfirm(null)}>
+            <Button variant="outline" className="flex-1 min-h-[44px]" onClick={() => setConfirm(null)} type="button">
               Cancelar
             </Button>
 
             <Button
               className="flex-1 min-h-[44px]"
+              type="button"
               onClick={async () => {
                 const c = confirm;
                 setConfirm(null);

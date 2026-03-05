@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,11 +53,7 @@ function InstallAppButton() {
     return () => window.removeEventListener("beforeinstallprompt", handler as any);
   }, []);
 
-  // já está instalado
   if (isStandalone) return null;
-
-  // Android/Chrome/Edge: só aparece se o navegador sinalizar que está instalável
-  // iOS: não existe beforeinstallprompt -> mostra instrução manual
   if (!deferred && !isIOS) return null;
 
   return (
@@ -100,6 +98,8 @@ function InstallAppButton() {
 }
 
 export default function HomePage() {
+  const router = useRouter();
+
   const [groups, setGroups] = useState<GroupRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -134,7 +134,6 @@ export default function HomePage() {
 
     if (error) return alert(error.message);
 
-    // guarda o pin local pra já liberar edição no grupo
     const gid = (data as any) as string;
     localStorage.setItem(`pin:${gid}`, pin);
 
@@ -142,8 +141,7 @@ export default function HomePage() {
     setNewPin("");
     await loadGroups();
 
-    // opcional: ir direto pro grupo
-    window.location.href = `/g/${gid}`;
+    router.push(`/g/${gid}`);
   }
 
   useEffect(() => {
@@ -154,12 +152,13 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* mobile: py-6 (economiza espaço), desktop: py-10 */}
       <div className="max-w-5xl mx-auto px-4 py-6 md:py-10 space-y-6">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tight">⚽ Futzin</h1>
-            <div className="text-sm text-muted-foreground"></div>
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight">⚽ Futzin</h1>
+            <div className="text-sm text-muted-foreground">
+              Crie grupos, compartilhe o Live e acompanhe o ranking da turma.
+            </div>
           </div>
 
           <InstallAppButton />
@@ -171,8 +170,8 @@ export default function HomePage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* mais separação visual dos campos */}
-            <div className="rounded-lg border bg-muted/30 p-3">
+            {/* sem borda interna (evita “borda dentro de borda”) */}
+            <div className="rounded-lg bg-muted/30 p-3">
               <div className="grid md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
                   <div className="text-xs font-semibold text-muted-foreground mb-1">Nome do grupo</div>
@@ -197,12 +196,10 @@ export default function HomePage() {
 
             <Separator />
 
-            <div className="flex gap-2 flex-wrap">
+            {/* hierarquia: ação principal em destaque; feedback/hint separado */}
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <Button onClick={createGroup}>Criar grupo</Button>
-              <Button variant="outline" onClick={loadGroups}>
-                Atualizar lista
-              </Button>
-              <div className="text-xs text-muted-foreground self-center">
+              <div className="text-xs text-muted-foreground">
                 O PIN fica salvo no seu navegador (localStorage) após criar.
               </div>
             </div>
@@ -213,7 +210,22 @@ export default function HomePage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Meus grupos</CardTitle>
-              <Badge variant="outline">{loading ? "carregando..." : `${groups.length} grupos`}</Badge>
+
+              <div className="flex items-center gap-2">
+                {/* “Atualizar” vira ação secundária no cabeçalho */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadGroups}
+                  disabled={loading}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Atualizar
+                </Button>
+
+                <Badge variant="outline">{loading ? "carregando..." : `${groups.length} grupos`}</Badge>
+              </div>
             </div>
           </CardHeader>
 
@@ -221,20 +233,30 @@ export default function HomePage() {
             {!hasAny ? (
               <div className="text-sm text-muted-foreground">Nenhum grupo ainda. Crie o primeiro acima.</div>
             ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 lg:grid-cols-3">
                 {groups.map((g) => (
                   <Card
                     key={g.id}
-                    className="relative overflow-hidden border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-border/70"
+                    className="group relative overflow-hidden border bg-card shadow-sm transition-all
+                               hover:shadow-md hover:-translate-y-0.5 hover:border-primary/30
+                               focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background"
                   >
-                    {/* indicador colorido */}
                     <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
 
-                    <CardContent className="p-4 pl-5 space-y-3">
-                      <div className="space-y-1">
-                        <div className="font-black text-lg">{g.name ?? "Grupo sem nome"}</div>
-                        <div className="text-xs text-muted-foreground">Criado em {fmtDate(g.created_at)}</div>
-                      </div>
+                    <CardContent className="p-4 pl-5 space-y-3 transition-colors group-hover:bg-muted/20">
+                      {/* área clicável com feedback (sem link aninhado) */}
+                      <button
+                        type="button"
+                        className="w-full text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => router.push(`/g/${g.id}`)}
+                      >
+                        <div className="space-y-1">
+                          <div className="font-black text-lg leading-tight">
+                            {g.name ?? "Grupo sem nome"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Criado em {fmtDate(g.created_at)}</div>
+                        </div>
+                      </button>
 
                       <div className="flex gap-2">
                         <Button asChild className="flex-1">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { Medal, Trophy } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,8 @@ type Row = {
   assists: number;
   saves: number;
   hard_saves?: number; // DD
-  goals_against?: number; // pode vir, mas não entra no cálculo
-  points: number; // recalculado no front
+  goals_against?: number;
+  points: number;
 };
 
 function cn(...xs: Array<string | false | null | undefined>) {
@@ -39,6 +40,40 @@ function cn(...xs: Array<string | false | null | undefined>) {
 function calcPoints(goals: number, assists: number, saves: number, hard_saves: number) {
   const pts = goals * 2 + assists * 1 + saves * 0.25 + hard_saves * 1;
   return Number(pts.toFixed(2));
+}
+
+function rankStyle(idx: number) {
+  if (idx === 0)
+    return {
+      ring: "ring-2 ring-yellow-500/30",
+      border: "border-yellow-400/70",
+      bg: "bg-yellow-500/10",
+      icon: <Trophy className="h-4 w-4 text-yellow-400" />,
+      badge: "1º",
+    };
+  if (idx === 1)
+    return {
+      ring: "ring-2 ring-zinc-400/20",
+      border: "border-zinc-300/40",
+      bg: "bg-zinc-500/5",
+      icon: <Medal className="h-4 w-4 text-zinc-200" />,
+      badge: "2º",
+    };
+  if (idx === 2)
+    return {
+      ring: "ring-2 ring-amber-700/20",
+      border: "border-amber-600/40",
+      bg: "bg-amber-600/10",
+      icon: <Medal className="h-4 w-4 text-amber-400" />,
+      badge: "3º",
+    };
+  return {
+    ring: "",
+    border: "border",
+    bg: "",
+    icon: null as any,
+    badge: `#${idx + 1}`,
+  };
 }
 
 export default function RankingPage() {
@@ -68,10 +103,7 @@ export default function RankingPage() {
       if (typeFilter !== "ALL") {
         const ids = list.map((r) => r.player_id);
         if (ids.length > 0) {
-          const { data: ps, error: ep } = await supabase
-            .from("players")
-            .select("id,type")
-            .in("id", ids);
+          const { data: ps, error: ep } = await supabase.from("players").select("id,type").in("id", ids);
 
           if (!ep && ps) {
             const typeById: Record<string, string> = {};
@@ -116,8 +148,7 @@ export default function RankingPage() {
       if (b.points !== a.points) return b.points - a.points;
       if (b.goals !== a.goals) return b.goals - a.goals;
       if (b.assists !== a.assists) return b.assists - a.assists;
-      if ((b.hard_saves ?? 0) !== (a.hard_saves ?? 0))
-        return (b.hard_saves ?? 0) - (a.hard_saves ?? 0);
+      if ((b.hard_saves ?? 0) !== (a.hard_saves ?? 0)) return (b.hard_saves ?? 0) - (a.hard_saves ?? 0);
       return b.saves - a.saves;
     });
   }, [rows]);
@@ -138,22 +169,25 @@ export default function RankingPage() {
           </div>
 
           <Card className="p-3">
-            <div className="grid md:grid-cols-2 gap-3 items-start">
+            {/* mobile: empilha (evita sobrepor) */}
+            <div className="grid gap-3 md:grid-cols-2 items-start">
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-muted-foreground">Período</div>
                 <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)}>
-                  <TabsList className="flex flex-wrap">
-                    <TabsTrigger value="MONTH">Este mês</TabsTrigger>
-                    <TabsTrigger value="QUARTER">Últimos 3 meses</TabsTrigger>
-                    <TabsTrigger value="YEAR">Ano</TabsTrigger>
-                  </TabsList>
+                  {/* evita corte/overlap no mobile: scroll horizontal */}
+                  <div className="-mx-1 overflow-x-auto">
+                    <TabsList className="w-max min-w-full md:w-auto">
+                      <TabsTrigger value="MONTH">Este mês</TabsTrigger>
+                      <TabsTrigger value="QUARTER">Últimos 3 meses</TabsTrigger>
+                      <TabsTrigger value="YEAR">Ano</TabsTrigger>
+                    </TabsList>
+                  </div>
                 </Tabs>
               </div>
 
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-muted-foreground">Tipo</div>
                 <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
-                  {/* maior no mobile */}
                   <SelectTrigger className="h-11 w-full">
                     <SelectValue />
                   </SelectTrigger>
@@ -174,9 +208,7 @@ export default function RankingPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Tabela</CardTitle>
-              <Badge variant="outline">
-                {loading ? "carregando..." : `${sorted.length} jogadores`}
-              </Badge>
+              <Badge variant="outline">{loading ? "carregando..." : `${sorted.length} jogadores`}</Badge>
             </div>
           </CardHeader>
 
@@ -190,57 +222,59 @@ export default function RankingPage() {
                 {/* Mobile: cards */}
                 <div className="md:hidden space-y-2">
                   {sorted.map((r, idx) => {
-                    const isFirst = idx === 0;
+                    const s = rankStyle(idx);
+
                     return (
-                      <Card
-                        key={r.player_id}
-                        className={cn(
-                          "border",
-                          isFirst && "border-yellow-400/80 shadow-sm"
-                        )}
-                      >
+                      <Card key={r.player_id} className={cn(s.border, s.bg, s.ring)}>
                         <CardContent className="p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                {/* posição com destaque */}
+                                {/* posição + medalha */}
                                 <div
                                   className={cn(
-                                    "text-sm font-black tabular-nums",
-                                    isFirst && "text-yellow-400"
+                                    "shrink-0 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-black tabular-nums",
+                                    idx === 0 && "border-yellow-400/70 text-yellow-300",
+                                    idx === 1 && "border-zinc-300/40 text-zinc-200",
+                                    idx === 2 && "border-amber-600/40 text-amber-300"
                                   )}
                                 >
-                                  #{idx + 1}
+                                  {s.icon}
+                                  {s.badge}
                                 </div>
 
-                                <div className="font-black truncate">{r.player_name}</div>
+                                <div className={cn("font-black truncate", idx === 0 && "text-lg")}>{r.player_name}</div>
 
-                                {isFirst && (
-                                  <Badge
-                                    variant="outline"
-                                    className="border-yellow-400/70 text-yellow-400"
-                                  >
-                                    🏆 MVP
+                                {idx === 0 && (
+                                  <Badge variant="outline" className="border-yellow-400/70 text-yellow-400">
+                                    MVP
                                   </Badge>
                                 )}
                               </div>
                             </div>
 
-                            <div className="shrink-0 font-black tabular-nums">
+                            <div className={cn("shrink-0 font-black tabular-nums", idx === 0 && "text-lg")}>
                               {r.points} pts
                             </div>
                           </div>
 
-                          {/* layout compacto em linha única */}
-                          <div className="text-sm text-muted-foreground">
-                            <span className="font-semibold text-foreground">Gols:</span>{" "}
-                            <span className="tabular-nums">{r.goals ?? 0}</span>{" "}
-                            · <span className="font-semibold text-foreground">Ass:</span>{" "}
-                            <span className="tabular-nums">{r.assists ?? 0}</span>{" "}
-                            · <span className="font-semibold text-foreground">Def:</span>{" "}
-                            <span className="tabular-nums">{r.saves ?? 0}</span>{" "}
-                            · <span className="font-semibold text-foreground">DD:</span>{" "}
-                            <span className="tabular-nums">{Number(r.hard_saves ?? 0)}</span>
+                          <div className="grid grid-cols-4 gap-2 text-sm">
+                            <div className="rounded-lg border bg-muted/40 px-2 py-2 text-center">
+                              <div className="text-[10px] font-semibold text-muted-foreground">G</div>
+                              <div className="font-black tabular-nums">{r.goals ?? 0}</div>
+                            </div>
+                            <div className="rounded-lg border bg-muted/40 px-2 py-2 text-center">
+                              <div className="text-[10px] font-semibold text-muted-foreground">A</div>
+                              <div className="font-black tabular-nums">{r.assists ?? 0}</div>
+                            </div>
+                            <div className="rounded-lg border bg-muted/40 px-2 py-2 text-center">
+                              <div className="text-[10px] font-semibold text-muted-foreground">D</div>
+                              <div className="font-black tabular-nums">{r.saves ?? 0}</div>
+                            </div>
+                            <div className="rounded-lg border bg-muted/40 px-2 py-2 text-center">
+                              <div className="text-[10px] font-semibold text-muted-foreground">DD</div>
+                              <div className="font-black tabular-nums">{Number(r.hard_saves ?? 0)}</div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -267,17 +301,17 @@ export default function RankingPage() {
                         <tr
                           key={r.player_id}
                           className={cn(
-                            "border-b",
-                            idx === 0 && "bg-muted/40"
+                            "border-b transition-colors hover:bg-muted/30",
+                            idx === 0 && "bg-yellow-500/10"
                           )}
                         >
-                          <td className="py-2 pr-3 font-semibold">{idx + 1}</td>
+                          <td className="py-2 pr-3 font-semibold tabular-nums">{idx + 1}</td>
                           <td className="py-2 pr-3 font-black">{r.player_name}</td>
-                          <td className="py-2 pr-3 font-black">{r.points ?? 0}</td>
-                          <td className="py-2 pr-3">{r.goals ?? 0}</td>
-                          <td className="py-2 pr-3">{r.assists ?? 0}</td>
-                          <td className="py-2 pr-3">{r.saves ?? 0}</td>
-                          <td className="py-2 pr-3">{Number(r.hard_saves ?? 0)}</td>
+                          <td className="py-2 pr-3 font-black tabular-nums">{r.points ?? 0}</td>
+                          <td className="py-2 pr-3 tabular-nums">{r.goals ?? 0}</td>
+                          <td className="py-2 pr-3 tabular-nums">{r.assists ?? 0}</td>
+                          <td className="py-2 pr-3 tabular-nums">{r.saves ?? 0}</td>
+                          <td className="py-2 pr-3 tabular-nums">{Number(r.hard_saves ?? 0)}</td>
                         </tr>
                       ))}
                     </tbody>
