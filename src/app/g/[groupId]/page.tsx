@@ -51,9 +51,9 @@ function clamp99(n: number) {
 
 function StatPill({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border bg-muted/50 px-2 py-1">
+    <div className="w-[76px] rounded-xl border bg-muted/50 px-2 py-1">
       <div className="text-[10px] font-semibold text-muted-foreground">{label}</div>
-      <div className="text-sm font-black tabular-nums">{value}</div>
+      <div className="text-sm font-black tabular-nums text-center">{value}</div>
     </div>
   );
 }
@@ -128,7 +128,7 @@ function PlayerCard({
           </Button>
         </div>
 
-        <div className="grid grid-cols-5 gap-2">
+        <div className="flex flex-wrap gap-2">
           <StatPill label="VEL" value={p.pace ?? 50} />
           <StatPill label="CHU" value={p.shooting ?? 50} />
           <StatPill label="PAS" value={p.passing ?? 50} />
@@ -215,12 +215,27 @@ function PlayerCard({
               />
             </div>
 
-            <div className="grid grid-cols-5 gap-2 text-[10px] font-semibold text-muted-foreground">
-              <div>VEL</div>
-              <div>CHU</div>
-              <div>PAS</div>
-              <div>DEF</div>
-              <div>FIS</div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: "VEL", val: pace, set: setPace },
+                { key: "CHU", val: sho,  set: setSho  },
+                { key: "PAS", val: pas,  set: setPas  },
+                { key: "DEF", val: def,  set: setDef  },
+                { key: "FIS", val: phy,  set: setPhy  },
+              ].map((x) => (
+                <div key={x.key} className="w-[76px] space-y-1">
+                  <div className="text-[10px] font-semibold text-muted-foreground text-center">{x.key}</div>
+                  <Input
+                    className="h-9 px-2 text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={x.val}
+                    onChange={(e) => x.set(+e.target.value)}
+                    disabled={!canEdit}
+                  />
+                </div>
+              ))}
             </div>
 
             <Button className="w-full" onClick={save} disabled={!canEdit} type="button">
