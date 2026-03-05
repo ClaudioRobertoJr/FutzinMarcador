@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 type Player = { id: string; name: string; type: "FIXO" | "COMPLETE" };
 
@@ -237,24 +236,24 @@ export default function MatchSetupPage() {
     if (side === "C") setNameC(first);
   }
 
-function autoSetOnCourt() {
-  if (!canEdit) return;
-  if (!match) return;
+  function autoSetOnCourt() {
+    if (!canEdit) return;
+    if (!match) return;
 
-  const setSide = (arr: Pick[]): Pick[] =>
-    arr.map((p, i) => ({
-      ...p,
-      state: (i < match.on_court ? "ON_COURT" : "BENCH") as Pick["state"],
-    }));
+    const setSide = (arr: Pick[]): Pick[] =>
+      arr.map((p, i) => ({
+        ...p,
+        state: (i < match.on_court ? "ON_COURT" : "BENCH") as Pick["state"],
+      }));
 
-  const setSideC = (arr: Pick[]): Pick[] =>
-    arr.map((p) => ({
-      ...p,
-      state: "BENCH" as Pick["state"],
-    }));
+    const setSideC = (arr: Pick[]): Pick[] =>
+      arr.map((p) => ({
+        ...p,
+        state: "BENCH" as Pick["state"],
+      }));
 
-  setPicks([...setSide(picksA), ...setSide(picksB), ...setSideC(picksC)]);
-}
+    setPicks([...setSide(picksA), ...setSide(picksB), ...setSideC(picksC)]);
+  }
 
   async function saveAll() {
     if (!canEdit) return alert("Somente leitura. Informe o PIN para editar.");
@@ -263,7 +262,6 @@ function autoSetOnCourt() {
       return alert("Coloque pelo menos 1 jogador no A e no B.");
     }
 
-    // 1) salva meta (nome/cor)
     const { error: emeta } = await supabase.rpc("update_match_meta", {
       p_match_id: matchId,
       p_team_a_name: nameA,
@@ -276,7 +274,6 @@ function autoSetOnCourt() {
     });
     if (emeta) return alert(emeta.message);
 
-    // 2) salva roster
     const fixed = picks.map((p) => (p.side === "C" ? { ...p, state: "BENCH" } : p));
     const payload = fixed.map((p) => ({ player_id: p.player_id, side: p.side, state: p.state }));
 
@@ -306,7 +303,8 @@ function autoSetOnCourt() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
+      {/* Sticky só do topo (compacto) */}
+      <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
@@ -324,92 +322,6 @@ function autoSetOnCourt() {
             </Button>
           </div>
 
-          <Card className="p-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="text-sm text-muted-foreground">
-                Edição: <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
-              </div>
-
-              <Input
-                type="password"
-                className="w-40"
-                placeholder="PIN"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-              />
-              <Button onClick={unlockEdit}>Liberar</Button>
-              <Button variant="outline" onClick={lockEdit}>
-                Bloquear
-              </Button>
-
-              {!canEdit && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  Somente leitura
-                </Badge>
-              )}
-            </div>
-          </Card>
-
-          {/* Meta times */}
-          <div className="grid md:grid-cols-3 gap-3">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border" style={{ background: colorA }} />
-                  Time A
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input value={nameA} onChange={(e) => setNameA(e.target.value)} disabled={!canEdit} />
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Cor</div>
-                  <input type="color" value={colorA} onChange={(e) => setColorA(e.target.value)} disabled={!canEdit} />
-                </div>
-                <Button variant="outline" onClick={() => useFirstName("A")} type="button" disabled={!canEdit}>
-                  Usar 1º jogador
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border" style={{ background: colorB }} />
-                  Time B
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input value={nameB} onChange={(e) => setNameB(e.target.value)} disabled={!canEdit} />
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Cor</div>
-                  <input type="color" value={colorB} onChange={(e) => setColorB(e.target.value)} disabled={!canEdit} />
-                </div>
-                <Button variant="outline" onClick={() => useFirstName("B")} type="button" disabled={!canEdit}>
-                  Usar 1º jogador
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className={cn(!hasC && "opacity-60")}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full border" style={{ background: colorC }} />
-                  Time C (espera)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input value={nameC} onChange={(e) => setNameC(e.target.value)} disabled={!canEdit || !hasC} />
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">Cor</div>
-                  <input type="color" value={colorC} onChange={(e) => setColorC(e.target.value)} disabled={!canEdit || !hasC} />
-                </div>
-                <Button variant="outline" onClick={() => useFirstName("C")} type="button" disabled={!canEdit || !hasC}>
-                  Usar 1º jogador
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
           <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
             <TabsList className="w-full md:w-auto">
               <TabsTrigger value="A">Time A</TabsTrigger>
@@ -421,6 +333,100 @@ function autoSetOnCourt() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        {/* PIN (fora do sticky) */}
+        <Card className="p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-sm text-muted-foreground">
+              Edição: <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
+            </div>
+
+            <Input
+              type="password"
+              className="w-40"
+              placeholder="PIN"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+            />
+            <Button onClick={unlockEdit} type="button">
+              Liberar
+            </Button>
+            <Button variant="outline" onClick={lockEdit} type="button">
+              Bloquear
+            </Button>
+
+            {!canEdit && (
+              <Badge variant="outline" className="text-muted-foreground">
+                Somente leitura
+              </Badge>
+            )}
+          </div>
+        </Card>
+
+        {/* Meta times (fora do sticky) */}
+        <div className="grid md:grid-cols-3 gap-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border" style={{ background: colorA }} />
+                Time A
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input value={nameA} onChange={(e) => setNameA(e.target.value)} disabled={!canEdit} />
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Cor</div>
+                <input type="color" value={colorA} onChange={(e) => setColorA(e.target.value)} disabled={!canEdit} />
+              </div>
+              <Button variant="outline" onClick={() => useFirstName("A")} type="button" disabled={!canEdit}>
+                Usar 1º jogador
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border" style={{ background: colorB }} />
+                Time B
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input value={nameB} onChange={(e) => setNameB(e.target.value)} disabled={!canEdit} />
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Cor</div>
+                <input type="color" value={colorB} onChange={(e) => setColorB(e.target.value)} disabled={!canEdit} />
+              </div>
+              <Button variant="outline" onClick={() => useFirstName("B")} type="button" disabled={!canEdit}>
+                Usar 1º jogador
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className={cn(!hasC && "opacity-60")}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full border" style={{ background: colorC }} />
+                Time C (espera)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input value={nameC} onChange={(e) => setNameC(e.target.value)} disabled={!canEdit || !hasC} />
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Cor</div>
+                <input
+                  type="color"
+                  value={colorC}
+                  onChange={(e) => setColorC(e.target.value)}
+                  disabled={!canEdit || !hasC}
+                />
+              </div>
+              <Button variant="outline" onClick={() => useFirstName("C")} type="button" disabled={!canEdit || !hasC}>
+                Usar 1º jogador
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Lista do time */}
         <Card>
           <CardHeader className="pb-3">
@@ -429,9 +435,7 @@ function autoSetOnCourt() {
                 <span className="h-3 w-3 rounded-full border" style={{ background: teamColor(tab) }} />
                 {teamLabel(tab)}
               </CardTitle>
-              <Badge variant="outline">
-                {currentTeam.length} jogador(es)
-              </Badge>
+              <Badge variant="outline">{currentTeam.length} jogador(es)</Badge>
             </div>
           </CardHeader>
 
@@ -470,11 +474,7 @@ function autoSetOnCourt() {
               </div>
             )}
 
-            {tab === "C" && (
-              <div className="text-xs text-muted-foreground">
-                Time C fica sempre no banco nesta rodada.
-              </div>
-            )}
+            {tab === "C" && <div className="text-xs text-muted-foreground">Time C fica sempre no banco nesta rodada.</div>}
           </CardContent>
         </Card>
 
@@ -509,10 +509,10 @@ function autoSetOnCourt() {
         </Card>
 
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 h-12" onClick={autoSetOnCourt} disabled={!canEdit}>
+          <Button variant="outline" className="flex-1 h-12" onClick={autoSetOnCourt} disabled={!canEdit} type="button">
             Auto: primeiros em quadra
           </Button>
-          <Button className="flex-1 h-12" onClick={saveAll} disabled={!canEdit}>
+          <Button className="flex-1 h-12" onClick={saveAll} disabled={!canEdit} type="button">
             Salvar e ir pro Live
           </Button>
         </div>
