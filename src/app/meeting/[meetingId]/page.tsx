@@ -31,7 +31,7 @@ type PlayerStat = {
   assists: number;
   saves: number;
   hard_saves?: number; // DD
-  goals_against?: number; // pode existir, mas não entra no cálculo
+  goals_against?: number;
   points: number;
 };
 
@@ -70,6 +70,119 @@ function fmtDateTimeBR(iso: string | null | undefined) {
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 
+function ShareTop5CardCapture({
+  top5,
+  meetingStartsAt,
+  meetingId,
+}: {
+  top5: PlayerStat[];
+  meetingStartsAt: string | null;
+  meetingId: string;
+}) {
+  const dateLabel = meetingStartsAt ? fmtDateTimeBR(meetingStartsAt) : `ID: ${meetingId}`;
+
+  return (
+    <div
+      style={{
+        width: 1080,
+        height: 1080,
+        padding: 44,
+        borderRadius: 48,
+        color: "#fff",
+        background: "linear-gradient(135deg, #0b0b0b 0%, #141414 45%, #0b0b0b 100%)",
+        border: "2px solid rgba(255,255,255,0.10)",
+        boxSizing: "border-box",
+        fontFamily:
+          'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24 }}>
+        <div>
+          <div style={{ fontSize: 22, opacity: 0.85 }}>Futzin Marcador</div>
+          <div style={{ fontSize: 64, fontWeight: 900, marginTop: 6, lineHeight: 1.05 }}>Top 5 do</div>
+          <div style={{ fontSize: 64, fontWeight: 900, lineHeight: 1.05 }}>Encontro</div>
+          <div style={{ fontSize: 28, opacity: 0.85, marginTop: 10 }}>{dateLabel}</div>
+        </div>
+
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 20, opacity: 0.85 }}>Critério</div>
+          <div style={{ fontSize: 28, fontWeight: 800, opacity: 0.95, marginTop: 6 }}>G*2 + A*1 + D*0.25 +</div>
+          <div style={{ fontSize: 28, fontWeight: 800, opacity: 0.95 }}>DD*1</div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 34,
+          borderRadius: 28,
+          border: "2px solid rgba(255,255,255,0.12)",
+          overflow: "hidden",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      >
+        {/* header */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "80px 1fr 120px 220px",
+            gap: 0,
+            padding: "18px 22px",
+            background: "rgba(255,255,255,0.08)",
+            fontSize: 22,
+            opacity: 0.9,
+            fontWeight: 700,
+          }}
+        >
+          <div>#</div>
+          <div>Jogador</div>
+          <div style={{ textAlign: "right" }}>Pts</div>
+          <div style={{ textAlign: "right" }}>G / A / D / DD</div>
+        </div>
+
+        {top5.map((p, idx) => {
+          const isMvp = idx === 0;
+          const dd = Number(p.hard_saves ?? 0);
+
+          return (
+            <div
+              key={p.player_id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "80px 1fr 120px 220px",
+                gap: 0,
+                padding: "18px 22px",
+                borderTop: "1px solid rgba(255,255,255,0.10)",
+                background: isMvp ? "rgba(255,255,255,0.08)" : "transparent",
+              }}
+            >
+              <div style={{ fontSize: 30, fontWeight: isMvp ? 900 : 700 }}>{idx + 1}</div>
+
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 34, fontWeight: isMvp ? 900 : 800, lineHeight: 1.15 }}>
+                  {p.player_name}
+                  {isMvp ? " (MVP)" : ""}
+                </div>
+              </div>
+
+              <div style={{ textAlign: "right", fontSize: 40, fontWeight: isMvp ? 900 : 800 }}>
+                {p.points}
+              </div>
+
+              <div style={{ textAlign: "right", fontSize: 26, opacity: 0.95, fontWeight: 700 }}>
+                {p.goals} / {p.assists} / {p.saves} / {dd}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 28, fontSize: 22, opacity: 0.85 }}>
+        Compartilhe este card no WhatsApp como imagem.
+      </div>
+    </div>
+  );
+}
+
 export default function MeetingPage() {
   const { meetingId } = useParams<{ meetingId: string }>();
 
@@ -91,20 +204,14 @@ export default function MeetingPage() {
   }
 
   async function loadSummary() {
-    const { data: ms, error: e1 } = await supabase.rpc("get_meeting_matches", {
-      p_meeting_id: meetingId,
-    });
+    const { data: ms, error: e1 } = await supabase.rpc("get_meeting_matches", { p_meeting_id: meetingId });
     if (e1) return alert(e1.message);
     setMatches((ms ?? []) as any);
 
-    const { data: ps, error: e2 } = await supabase.rpc("get_meeting_player_stats", {
-      p_meeting_id: meetingId,
-    });
+    const { data: ps, error: e2 } = await supabase.rpc("get_meeting_player_stats", { p_meeting_id: meetingId });
     if (e2) return alert(e2.message);
 
-    // normaliza + recalcula (se a RPC já vier certo, continua ok)
     let list = (ps ?? []) as any[];
-
     list = list.map((s: any) => {
       const goals = Number(s.goals ?? 0);
       const assists = Number(s.assists ?? 0);
@@ -169,29 +276,29 @@ export default function MeetingPage() {
 
   async function shareTop5PNG() {
     if (sharing) return;
+    if (!top5.length) return;
+
     setSharing(true);
     try {
-      const el = document.getElementById("share-top5");
+      const el = document.getElementById("share-top5-capture");
       if (!el) {
-        alert("Card de compartilhamento não encontrado.");
+        alert("Card de captura não encontrado.");
         return;
       }
 
-      // precisa: npm i html-to-image
       const { toPng } = await import("html-to-image");
 
       const dataUrl = await toPng(el, {
         cacheBust: true,
         pixelRatio: 2,
-        // mantém o fundo do card na imagem
-        backgroundColor: "#0b0b0b",
+        width: 1080,
+        height: 1080,
       });
 
       const blob = await (await fetch(dataUrl)).blob();
       const fileName = `futzin_meeting_${meetingId}_top5.png`;
       const file = new File([blob], fileName, { type: "image/png" });
 
-      // Share (mobile) -> WhatsApp aparece no menu
       const canShareFiles =
         typeof navigator !== "undefined" &&
         "share" in navigator &&
@@ -208,7 +315,6 @@ export default function MeetingPage() {
         return;
       }
 
-      // fallback: download
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = fileName;
@@ -230,8 +336,9 @@ export default function MeetingPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
+      {/* Sticky agora é SÓ a barra superior */}
+      <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
+        <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <div className="text-xs text-muted-foreground">Encontro</div>
@@ -255,117 +362,52 @@ export default function MeetingPage() {
               </Button>
             </div>
           </div>
-
-          {mvp && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Craque do dia (MVP)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-2xl font-black">{mvp.player_name}</div>
-
-                <div className="flex gap-2 flex-wrap">
-                  <StatBox label="Pontos" value={mvp.points} />
-                  <StatBox label="Gols" value={mvp.goals} />
-                  <StatBox label="Assists" value={mvp.assists} />
-                  <StatBox label="Defesas" value={mvp.saves} />
-                  <StatBox label="DD" value={Number(mvp.hard_saves ?? 0)} />
-                  {typeof mvp.goals_against === "number" && <StatBox label="GA" value={mvp.goals_against ?? 0} />}
-                </div>
-
-                <div className="text-xs text-muted-foreground">
-                  Critério: points = (G*2) + (A*1) + (D*0.25) + (DD*1).
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Card que vira imagem */}
-          {top5.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <CardTitle className="text-base">Resumo para compartilhar (Top 5)</CardTitle>
-                  <Button onClick={shareTop5PNG} disabled={sharing}>
-                    {sharing ? "Gerando..." : "Compartilhar PNG (Top 5)"}
-                  </Button>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {/* ESTE BLOCO É O QUE VIRA PNG */}
-                <div
-                  id="share-top5"
-                  className="rounded-2xl border p-4"
-                  style={{
-                    background: "#0b0b0b",
-                    color: "white",
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs opacity-80">Futzin Marcador</div>
-                      <div className="text-lg font-black">Top 5 do Encontro</div>
-                      <div className="text-xs opacity-80">
-                        {meetingStartsAt ? fmtDateTimeBR(meetingStartsAt) : `ID: ${meetingId}`}
-                      </div>
-                    </div>
-                    <div className="text-xs opacity-80 text-right">
-                      <div>Critério</div>
-                      <div className="font-semibold">G*2 + A*1 + D*0.25 + DD*1</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-xl border border-white/15 overflow-hidden">
-                    <div className="grid grid-cols-[32px_1fr_64px_40px_40px_40px_40px] gap-0 text-[11px] bg-white/10 px-2 py-2">
-                      <div className="opacity-80">#</div>
-                      <div className="opacity-80">Jogador</div>
-                      <div className="opacity-80 text-right">Pts</div>
-                      <div className="opacity-80 text-right">G</div>
-                      <div className="opacity-80 text-right">A</div>
-                      <div className="opacity-80 text-right">D</div>
-                      <div className="opacity-80 text-right">DD</div>
-                    </div>
-
-                    {top5.map((p, idx) => {
-                      const isMvp = idx === 0;
-                      return (
-                        <div
-                          key={p.player_id}
-                          className={cn(
-                            "grid grid-cols-[32px_1fr_64px_40px_40px_40px_40px] gap-0 px-2 py-2 border-t border-white/10",
-                            isMvp && "bg-white/10"
-                          )}
-                        >
-                          <div className={cn("text-[12px]", isMvp && "font-black")}>{idx + 1}</div>
-                          <div className={cn("text-[12px] truncate", isMvp && "font-black")}>
-                            {p.player_name} {isMvp ? " (MVP)" : ""}
-                          </div>
-                          <div className={cn("text-right text-[12px]", isMvp && "font-black")}>{p.points}</div>
-                          <div className="text-right text-[12px]">{p.goals}</div>
-                          <div className="text-right text-[12px]">{p.assists}</div>
-                          <div className="text-right text-[12px]">{p.saves}</div>
-                          <div className="text-right text-[12px]">{Number(p.hard_saves ?? 0)}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-3 text-[11px] opacity-80">
-                    Compartilhe este card no WhatsApp como imagem.
-                  </div>
-                </div>
-
-                <div className="text-xs text-muted-foreground">
-                  No celular, use “Compartilhar PNG (Top 5)” e selecione WhatsApp.
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
 
+      {/* Conteúdo normal (não fica por baixo do sticky) */}
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+        {mvp && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Craque do dia (MVP)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-2xl font-black">{mvp.player_name}</div>
+
+              <div className="flex gap-2 flex-wrap">
+                <StatBox label="Pontos" value={mvp.points} />
+                <StatBox label="Gols" value={mvp.goals} />
+                <StatBox label="Assists" value={mvp.assists} />
+                <StatBox label="Defesas" value={mvp.saves} />
+                <StatBox label="DD" value={Number(mvp.hard_saves ?? 0)} />
+                {typeof mvp.goals_against === "number" && <StatBox label="GA" value={mvp.goals_against ?? 0} />}
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Critério: points = (G*2) + (A*1) + (D*0.25) + (DD*1).
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Share */}
+        {top5.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base">Resumo para compartilhar (Top 5)</CardTitle>
+                <Button onClick={shareTop5PNG} disabled={sharing}>
+                  {sharing ? "Gerando..." : "Compartilhar PNG (Top 5)"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Gera uma imagem 1080×1080 (legível) e abre o compartilhamento no celular.
+            </CardContent>
+          </Card>
+        )}
+
         {/* Rodadas */}
         <Card>
           <CardHeader className="pb-3">
@@ -420,7 +462,6 @@ export default function MeetingPage() {
               <div className="text-sm text-muted-foreground">Sem stats ainda.</div>
             ) : (
               <>
-                {/* Mobile: cards */}
                 <div className="md:hidden space-y-2">
                   {stats.map((s, idx) => (
                     <Card key={s.player_id} className="border">
@@ -445,7 +486,6 @@ export default function MeetingPage() {
                   ))}
                 </div>
 
-                {/* Desktop: tabela */}
                 <div className="hidden md:block overflow-auto">
                   <table className="min-w-[920px] w-full text-left border-collapse text-sm">
                     <thead>
@@ -487,6 +527,15 @@ export default function MeetingPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Card de captura OFFSCREEN (tamanho fixo para PNG legível) */}
+      {top5.length > 0 && (
+        <div style={{ position: "fixed", left: -10000, top: 0, width: 1080, height: 1080, zIndex: -1 }}>
+          <div id="share-top5-capture">
+            <ShareTop5CardCapture top5={top5} meetingStartsAt={meetingStartsAt} meetingId={meetingId} />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
