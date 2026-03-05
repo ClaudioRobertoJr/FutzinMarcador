@@ -20,6 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// dropdown menu (para reduzir densidade do header no mobile)
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 type Pos = "GK" | "FIXO" | "ALA_E" | "ALA_D" | "PIVO";
 
 type Player = {
@@ -49,11 +57,25 @@ function clamp99(n: number) {
   return Math.max(0, Math.min(99, n));
 }
 
-function StatPill({ label, value }: { label: string; value: number }) {
+function StatPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  const v = clamp99(value);
   return (
-    <div className="w-[76px] rounded-xl border bg-muted/50 px-2 py-1">
-      <div className="text-[10px] font-semibold text-muted-foreground">{label}</div>
-      <div className="text-sm font-black tabular-nums text-center">{value}</div>
+    <div className="w-[68px] rounded-xl border bg-muted/50 px-2 py-1">
+      <div className="text-[10px] font-semibold text-muted-foreground text-center">
+        {label}
+      </div>
+      <div className="text-sm font-black tabular-nums text-center">{v}</div>
+
+      {/* barra de progresso simples */}
+      <div className="mt-1 w-full bg-muted rounded-full h-1 overflow-hidden">
+        <div className="h-1 bg-primary" style={{ width: `${(v / 99) * 100}%` }} />
+      </div>
     </div>
   );
 }
@@ -109,7 +131,8 @@ function PlayerCard({
 
   return (
     <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60 hover:bg-card hover:shadow-md transition">
-      <CardContent className="p-4 space-y-3">
+      {/* reduz espaço vazio quando fechado: padding menor no modo fechado */}
+      <CardContent className={open ? "p-4 space-y-3" : "p-3 space-y-2"}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-lg font-black leading-tight">{p.name}</div>
@@ -120,6 +143,8 @@ function PlayerCard({
 
           <Button
             variant="outline"
+            size="sm"
+            className="h-9"
             disabled={!canEdit}
             onClick={() => setOpen((v) => !v)}
             type="button"
@@ -128,7 +153,8 @@ function PlayerCard({
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* pills + progresso: gap-3 e w-[68px] */}
+        <div className="flex flex-wrap gap-3">
           <StatPill label="VEL" value={p.pace ?? 50} />
           <StatPill label="CHU" value={p.shooting ?? 50} />
           <StatPill label="PAS" value={p.passing ?? 50} />
@@ -145,7 +171,9 @@ function PlayerCard({
                 <div className="text-xs font-semibold text-muted-foreground">Posição</div>
                 <Select
                   value={pos || "__none__"}
-                  onValueChange={(v) => setPos((v === "__none__" ? "" : (v as Pos)) as any)}
+                  onValueChange={(v) =>
+                    setPos((v === "__none__" ? "" : (v as Pos)) as any)
+                  }
                   disabled={!canEdit}
                 >
                   <SelectTrigger>
@@ -215,16 +243,18 @@ function PlayerCard({
               />
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               {[
                 { key: "VEL", val: pace, set: setPace },
-                { key: "CHU", val: sho,  set: setSho  },
-                { key: "PAS", val: pas,  set: setPas  },
-                { key: "DEF", val: def,  set: setDef  },
-                { key: "FIS", val: phy,  set: setPhy  },
+                { key: "CHU", val: sho, set: setSho },
+                { key: "PAS", val: pas, set: setPas },
+                { key: "DEF", val: def, set: setDef },
+                { key: "FIS", val: phy, set: setPhy },
               ].map((x) => (
-                <div key={x.key} className="w-[76px] space-y-1">
-                  <div className="text-[10px] font-semibold text-muted-foreground text-center">{x.key}</div>
+                <div key={x.key} className="w-[68px] space-y-1">
+                  <div className="text-[10px] font-semibold text-muted-foreground text-center">
+                    {x.key}
+                  </div>
                   <Input
                     className="h-9 px-2 text-center tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     type="number"
@@ -418,21 +448,41 @@ export default function GroupPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      {/* header sticky menos denso */}
       <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-xs text-muted-foreground">Grupo</div>
-              <div className="text-xl font-black">Painel</div>
+              <div className="text-xl font-black leading-tight">Painel</div>
             </div>
 
-            <div className="flex gap-2 flex-wrap">
+            {/* Desktop: mantém botões. Mobile: vira menu "Mais" */}
+            <div className="hidden sm:flex gap-2">
               <Button asChild variant="outline">
                 <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/">Voltar</Link>
               </Button>
+            </div>
+
+            <div className="sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 px-3">
+                    Mais
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/">Voltar</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -441,9 +491,7 @@ export default function GroupPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="text-sm text-muted-foreground">
                   Edição:{" "}
-                  <b className="text-foreground">
-                    {canEdit ? "LIBERADA" : "SOMENTE LEITURA"}
-                  </b>
+                  <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
                 </div>
 
                 <Input
@@ -481,6 +529,7 @@ export default function GroupPage() {
             </Card>
           )}
 
+          {/* mantém a grid, mas header com menos padding e menos space-y */}
           <div className="grid md:grid-cols-3 gap-2">
             <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
               Criar encontro + partida
@@ -554,7 +603,9 @@ export default function GroupPage() {
                 <div className="text-xs font-semibold text-muted-foreground mb-1">Posição</div>
                 <Select
                   value={playerPos || "__none__"}
-                  onValueChange={(v) => setPlayerPos((v === "__none__" ? "" : (v as Pos)) as any)}
+                  onValueChange={(v) =>
+                    setPlayerPos((v === "__none__" ? "" : (v as Pos)) as any)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="(sem)" />

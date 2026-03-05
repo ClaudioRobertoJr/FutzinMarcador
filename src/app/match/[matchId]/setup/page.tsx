@@ -36,6 +36,95 @@ function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
+function TeamMetaCard({
+  title,
+  badge,
+  name,
+  setName,
+  color,
+  setColor,
+  canEdit,
+  disabled,
+  isOpen,
+  onToggle,
+  onUseFirst,
+}: {
+  title: string;
+  badge?: string;
+  name: string;
+  setName: (v: string) => void;
+  color: string;
+  setColor: (v: string) => void;
+  canEdit: boolean;
+  disabled?: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onUseFirst: () => void;
+}) {
+  return (
+    <Card className={cn(disabled && "opacity-60")}>
+      <CardHeader className="py-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2 min-w-0">
+            <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: color }} />
+            <span className="truncate">{title}</span>
+            {badge ? (
+              <span className="text-xs font-semibold text-muted-foreground truncate">
+                • {badge}
+              </span>
+            ) : null}
+          </CardTitle>
+
+          {/* Mobile: colapsável */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 md:hidden"
+            onClick={onToggle}
+            type="button"
+            disabled={!canEdit || !!disabled}
+          >
+            {isOpen ? "Fechar" : "Editar"}
+          </Button>
+        </div>
+      </CardHeader>
+
+      {/* Desktop: sempre aberto. Mobile: abre/fecha. */}
+      <CardContent className={cn("space-y-3", "md:block", isOpen ? "block" : "hidden md:block")}>
+        <div className="space-y-2">
+          <div className="text-xs font-semibold text-muted-foreground">Nome</div>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={!canEdit || !!disabled}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">Cor</div>
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            disabled={!canEdit || !!disabled}
+            className="h-9 w-14 rounded-md border bg-transparent"
+          />
+        </div>
+
+        <Button
+          variant="outline"
+          onClick={onUseFirst}
+          type="button"
+          disabled={!canEdit || !!disabled}
+          className="w-full"
+        >
+          Usar 1º jogador
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MatchSetupPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const router = useRouter();
@@ -61,6 +150,13 @@ export default function MatchSetupPage() {
   // UX
   const [tab, setTab] = useState<"A" | "B" | "C">("A");
   const [query, setQuery] = useState("");
+
+  // Mobile: cards de meta colapsáveis
+  const [metaOpen, setMetaOpen] = useState<{ A: boolean; B: boolean; C: boolean }>({
+    A: false,
+    B: false,
+    C: false,
+  });
 
   function pinKey(gid: string) {
     return `pin:${gid}`;
@@ -362,69 +458,47 @@ export default function MatchSetupPage() {
           </div>
         </Card>
 
-        {/* Meta times (fora do sticky) */}
+        {/* Meta times (mobile colapsável / desktop sempre aberto) */}
         <div className="grid md:grid-cols-3 gap-3">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full border" style={{ background: colorA }} />
-                Time A
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Input value={nameA} onChange={(e) => setNameA(e.target.value)} disabled={!canEdit} />
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Cor</div>
-                <input type="color" value={colorA} onChange={(e) => setColorA(e.target.value)} disabled={!canEdit} />
-              </div>
-              <Button variant="outline" onClick={() => useFirstName("A")} type="button" disabled={!canEdit}>
-                Usar 1º jogador
-              </Button>
-            </CardContent>
-          </Card>
+          <TeamMetaCard
+            title="Time A"
+            badge={nameA}
+            name={nameA}
+            setName={setNameA}
+            color={colorA}
+            setColor={setColorA}
+            canEdit={canEdit}
+            isOpen={metaOpen.A}
+            onToggle={() => setMetaOpen((s) => ({ ...s, A: !s.A }))}
+            onUseFirst={() => useFirstName("A")}
+          />
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full border" style={{ background: colorB }} />
-                Time B
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Input value={nameB} onChange={(e) => setNameB(e.target.value)} disabled={!canEdit} />
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Cor</div>
-                <input type="color" value={colorB} onChange={(e) => setColorB(e.target.value)} disabled={!canEdit} />
-              </div>
-              <Button variant="outline" onClick={() => useFirstName("B")} type="button" disabled={!canEdit}>
-                Usar 1º jogador
-              </Button>
-            </CardContent>
-          </Card>
+          <TeamMetaCard
+            title="Time B"
+            badge={nameB}
+            name={nameB}
+            setName={setNameB}
+            color={colorB}
+            setColor={setColorB}
+            canEdit={canEdit}
+            isOpen={metaOpen.B}
+            onToggle={() => setMetaOpen((s) => ({ ...s, B: !s.B }))}
+            onUseFirst={() => useFirstName("B")}
+          />
 
-          <Card className={cn(!hasC && "opacity-60")}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full border" style={{ background: colorC }} />
-                Time C (espera)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Input value={nameC} onChange={(e) => setNameC(e.target.value)} disabled={!canEdit || !hasC} />
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Cor</div>
-                <input
-                  type="color"
-                  value={colorC}
-                  onChange={(e) => setColorC(e.target.value)}
-                  disabled={!canEdit || !hasC}
-                />
-              </div>
-              <Button variant="outline" onClick={() => useFirstName("C")} type="button" disabled={!canEdit || !hasC}>
-                Usar 1º jogador
-              </Button>
-            </CardContent>
-          </Card>
+          <TeamMetaCard
+            title="Time C (espera)"
+            badge={hasC ? nameC : "sem jogadores"}
+            name={nameC}
+            setName={setNameC}
+            color={colorC}
+            setColor={setColorC}
+            canEdit={canEdit}
+            disabled={!hasC}
+            isOpen={metaOpen.C}
+            onToggle={() => setMetaOpen((s) => ({ ...s, C: !s.C }))}
+            onUseFirst={() => useFirstName("C")}
+          />
         </div>
 
         {/* Lista do time */}
@@ -474,7 +548,9 @@ export default function MatchSetupPage() {
               </div>
             )}
 
-            {tab === "C" && <div className="text-xs text-muted-foreground">Time C fica sempre no banco nesta rodada.</div>}
+            {tab === "C" && (
+              <div className="text-xs text-muted-foreground">Time C fica sempre no banco nesta rodada.</div>
+            )}
           </CardContent>
         </Card>
 
@@ -484,32 +560,51 @@ export default function MatchSetupPage() {
             <CardTitle className="text-base">Adicionar jogador</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Input placeholder="Buscar…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            {/* busca com ícone */}
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                🔍
+              </span>
+              <Input
+                className="pl-9"
+                placeholder="Buscar jogador..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
 
             {filteredAvailable.length === 0 ? (
               <div className="text-sm text-muted-foreground">Sem disponíveis.</div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {filteredAvailable.map((p) => (
-                  <Button
-                    key={p.id}
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => addTo(tab, p.id)}
-                    disabled={!canEdit}
-                    type="button"
-                  >
-                    <span className="font-semibold">{p.name}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">({p.type})</span>
-                  </Button>
-                ))}
+              <div className="max-h-48 overflow-y-auto pr-1">
+                <div className="flex flex-wrap gap-2">
+                  {filteredAvailable.map((p) => (
+                    <Button
+                      key={p.id}
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() => addTo(tab, p.id)}
+                      disabled={!canEdit}
+                      type="button"
+                    >
+                      <span className="font-semibold">{p.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">({p.type})</span>
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
 
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 h-12" onClick={autoSetOnCourt} disabled={!canEdit} type="button">
+          <Button
+            variant="outline"
+            className="flex-1 h-12"
+            onClick={autoSetOnCourt}
+            disabled={!canEdit}
+            type="button"
+          >
             Auto: primeiros em quadra
           </Button>
           <Button className="flex-1 h-12" onClick={saveAll} disabled={!canEdit} type="button">

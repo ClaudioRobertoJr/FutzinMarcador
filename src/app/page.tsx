@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type GroupRow = {
@@ -60,9 +61,9 @@ function InstallAppButton() {
   return (
     <>
       <Button
-        variant="outline"
+        variant="secondary"
         size="sm"
-        className="shrink-0"
+        className="shrink-0 shadow-sm"
         onClick={async () => {
           if (deferred) {
             deferred.prompt();
@@ -153,41 +154,48 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
+      {/* mobile: py-6 (economiza espaço), desktop: py-10 */}
+      <div className="max-w-5xl mx-auto px-4 py-6 md:py-10 space-y-6">
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">Futzin Marcador</div>
-            <h1 className="text-3xl font-black tracking-tight">Home</h1>
+          <div className="space-y-1">
+            <h1 className="text-3xl font-black tracking-tight">⚽ Futzin</h1>
+            <div className="text-sm text-muted-foreground"></div>
           </div>
 
           <InstallAppButton />
         </div>
 
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Criar novo grupo</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid md:grid-cols-3 gap-2">
-              <div className="md:col-span-2">
-                <div className="text-xs font-semibold text-muted-foreground mb-1">Nome do grupo</div>
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Ex: Segunda & Quarta 19:30"
-                />
-              </div>
 
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground mb-1">PIN (edição)</div>
-                <Input
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  placeholder="Ex: 1234"
-                  type="password"
-                />
+          <CardContent className="space-y-4">
+            {/* mais separação visual dos campos */}
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="grid md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <div className="text-xs font-semibold text-muted-foreground mb-1">Nome do grupo</div>
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Ex: Segunda & Quarta 19:30"
+                  />
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-1">PIN (edição)</div>
+                  <Input
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value)}
+                    placeholder="Ex: 1234"
+                    type="password"
+                  />
+                </div>
               </div>
             </div>
+
+            <Separator />
 
             <div className="flex gap-2 flex-wrap">
               <Button onClick={createGroup}>Criar grupo</Button>
@@ -201,7 +209,7 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Meus grupos</CardTitle>
@@ -215,8 +223,14 @@ export default function HomePage() {
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {groups.map((g) => (
-                  <Card key={g.id} className="border">
-                    <CardContent className="p-4 space-y-3">
+                  <Card
+                    key={g.id}
+                    className="relative overflow-hidden border shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-border/70"
+                  >
+                    {/* indicador colorido */}
+                    <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
+
+                    <CardContent className="p-4 pl-5 space-y-3">
                       <div className="space-y-1">
                         <div className="font-black text-lg">{g.name ?? "Grupo sem nome"}</div>
                         <div className="text-xs text-muted-foreground">Criado em {fmtDate(g.created_at)}</div>

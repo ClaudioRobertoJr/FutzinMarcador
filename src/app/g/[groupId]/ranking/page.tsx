@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Period = "MONTH" | "QUARTER" | "YEAR";
 type TypeFilter = "ALL" | "FIXO" | "COMPLETE";
@@ -28,15 +34,6 @@ type Row = {
 
 function cn(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
-}
-
-function StatBox({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border px-2 py-2">
-      <div className="text-[10px] font-semibold text-muted-foreground">{label}</div>
-      <div className="text-sm font-black">{value}</div>
-    </div>
-  );
 }
 
 function calcPoints(goals: number, assists: number, saves: number, hard_saves: number) {
@@ -71,7 +68,10 @@ export default function RankingPage() {
       if (typeFilter !== "ALL") {
         const ids = list.map((r) => r.player_id);
         if (ids.length > 0) {
-          const { data: ps, error: ep } = await supabase.from("players").select("id,type").in("id", ids);
+          const { data: ps, error: ep } = await supabase
+            .from("players")
+            .select("id,type")
+            .in("id", ids);
 
           if (!ep && ps) {
             const typeById: Record<string, string> = {};
@@ -116,7 +116,8 @@ export default function RankingPage() {
       if (b.points !== a.points) return b.points - a.points;
       if (b.goals !== a.goals) return b.goals - a.goals;
       if (b.assists !== a.assists) return b.assists - a.assists;
-      if ((b.hard_saves ?? 0) !== (a.hard_saves ?? 0)) return (b.hard_saves ?? 0) - (a.hard_saves ?? 0);
+      if ((b.hard_saves ?? 0) !== (a.hard_saves ?? 0))
+        return (b.hard_saves ?? 0) - (a.hard_saves ?? 0);
       return b.saves - a.saves;
     });
   }, [rows]);
@@ -152,7 +153,8 @@ export default function RankingPage() {
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-muted-foreground">Tipo</div>
                 <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
-                  <SelectTrigger>
+                  {/* maior no mobile */}
+                  <SelectTrigger className="h-11 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -172,7 +174,9 @@ export default function RankingPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Tabela</CardTitle>
-              <Badge variant="outline">{loading ? "carregando..." : `${sorted.length} jogadores`}</Badge>
+              <Badge variant="outline">
+                {loading ? "carregando..." : `${sorted.length} jogadores`}
+              </Badge>
             </div>
           </CardHeader>
 
@@ -185,33 +189,70 @@ export default function RankingPage() {
               <>
                 {/* Mobile: cards */}
                 <div className="md:hidden space-y-2">
-                  {sorted.map((r, idx) => (
-                    <Card key={r.player_id} className="border">
-                      <CardContent className="p-3 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-black">
-                            #{idx + 1} — {r.player_name}
-                          </div>
-                          <div className="font-black">{r.points} pts</div>
-                        </div>
+                  {sorted.map((r, idx) => {
+                    const isFirst = idx === 0;
+                    return (
+                      <Card
+                        key={r.player_id}
+                        className={cn(
+                          "border",
+                          isFirst && "border-yellow-400/80 shadow-sm"
+                        )}
+                      >
+                        <CardContent className="p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                {/* posição com destaque */}
+                                <div
+                                  className={cn(
+                                    "text-sm font-black tabular-nums",
+                                    isFirst && "text-yellow-400"
+                                  )}
+                                >
+                                  #{idx + 1}
+                                </div>
 
-                        <div className="grid grid-cols-5 gap-2">
-                          <StatBox label="Pts" value={r.points ?? 0} />
-                          <StatBox label="Gols" value={r.goals ?? 0} />
-                          <StatBox label="Ass" value={r.assists ?? 0} />
-                          <StatBox label="Def" value={r.saves ?? 0} />
-                          <StatBox label="DD" value={Number(r.hard_saves ?? 0)} />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                                <div className="font-black truncate">{r.player_name}</div>
+
+                                {isFirst && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-yellow-400/70 text-yellow-400"
+                                  >
+                                    🏆 MVP
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 font-black tabular-nums">
+                              {r.points} pts
+                            </div>
+                          </div>
+
+                          {/* layout compacto em linha única */}
+                          <div className="text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground">Gols:</span>{" "}
+                            <span className="tabular-nums">{r.goals ?? 0}</span>{" "}
+                            · <span className="font-semibold text-foreground">Ass:</span>{" "}
+                            <span className="tabular-nums">{r.assists ?? 0}</span>{" "}
+                            · <span className="font-semibold text-foreground">Def:</span>{" "}
+                            <span className="tabular-nums">{r.saves ?? 0}</span>{" "}
+                            · <span className="font-semibold text-foreground">DD:</span>{" "}
+                            <span className="tabular-nums">{Number(r.hard_saves ?? 0)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 {/* Desktop: tabela */}
                 <div className="hidden md:block overflow-auto">
                   <table className="min-w-[860px] w-full text-left border-collapse">
                     <thead>
-                      <tr className="border-b text-muted-foreground">
+                      <tr className="sticky top-0 z-10 border-b bg-background text-muted-foreground">
                         <th className="py-2 pr-3">#</th>
                         <th className="py-2 pr-3">Jogador</th>
                         <th className="py-2 pr-3">Pontos</th>
@@ -223,7 +264,13 @@ export default function RankingPage() {
                     </thead>
                     <tbody>
                       {sorted.map((r, idx) => (
-                        <tr key={r.player_id} className={cn("border-b", idx === 0 && "bg-muted/40")}>
+                        <tr
+                          key={r.player_id}
+                          className={cn(
+                            "border-b",
+                            idx === 0 && "bg-muted/40"
+                          )}
+                        >
                           <td className="py-2 pr-3 font-semibold">{idx + 1}</td>
                           <td className="py-2 pr-3 font-black">{r.player_name}</td>
                           <td className="py-2 pr-3 font-black">{r.points ?? 0}</td>

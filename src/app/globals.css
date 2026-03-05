@@ -52,8 +52,56 @@ a { color: inherit; }
 @layer base {
   /* Vars precisam ficar no @layer base pra ganhar do shadcn/tailwind.css */
   :root {
+    color-scheme: dark;
+    --radius: 0.75rem;
+
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+
+    --primary: oklch(0.74 0.16 264.4);
+    --primary-foreground: oklch(0.145 0 0);
+
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+
+    --destructive: oklch(0.704 0.191 22.216);
+
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+
+    --ring: oklch(0.74 0.16 264.4);
+
+    --chart-1: oklch(0.488 0.243 264.376);
+    --chart-2: oklch(0.696 0.17 162.48);
+    --chart-3: oklch(0.769 0.188 70.08);
+    --chart-4: oklch(0.627 0.265 303.9);
+    --chart-5: oklch(0.645 0.246 16.439);
+
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
+  /* opcional: light mode via class */
+  .light {
     color-scheme: light;
-    --radius: 1rem;
 
     --background: oklch(0.992 0.003 260);
     --foreground: oklch(0.145 0 0);
@@ -100,52 +148,8 @@ a { color: inherit; }
     --sidebar-ring: var(--ring);
   }
 
-  .dark {
-    color-scheme: dark;
-
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-
-    --primary: oklch(0.74 0.16 264.4);
-    --primary-foreground: oklch(0.145 0 0);
-
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-
-    --destructive: oklch(0.704 0.191 22.216);
-
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-
-    --ring: oklch(0.74 0.16 264.4);
-
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: var(--primary);
-    --sidebar-primary-foreground: var(--primary-foreground);
-    --sidebar-accent: var(--accent);
-    --sidebar-accent-foreground: var(--accent-foreground);
-    --sidebar-border: var(--border);
-    --sidebar-ring: var(--ring);
-  }
+  /* mantém compatibilidade com dark: (se usar .dark no html) */
+  .dark { color-scheme: dark; }
 
   h1,h2,h3,h4,h5,h6 { @apply text-foreground; }
   p,span,li,div { color: inherit; }

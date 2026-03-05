@@ -164,9 +164,7 @@ function ShareTop5CardCapture({
                 </div>
               </div>
 
-              <div style={{ textAlign: "right", fontSize: 40, fontWeight: isMvp ? 900 : 800 }}>
-                {p.points}
-              </div>
+              <div style={{ textAlign: "right", fontSize: 40, fontWeight: isMvp ? 900 : 800 }}>{p.points}</div>
 
               <div style={{ textAlign: "right", fontSize: 26, opacity: 0.95, fontWeight: 700 }}>
                 {p.goals} / {p.assists} / {p.saves} / {dd}
@@ -176,9 +174,7 @@ function ShareTop5CardCapture({
         })}
       </div>
 
-      <div style={{ marginTop: 28, fontSize: 22, opacity: 0.85 }}>
-        Compartilhe este card no WhatsApp como imagem.
-      </div>
+      <div style={{ marginTop: 28, fontSize: 22, opacity: 0.85 }}>Compartilhe este card no WhatsApp como imagem.</div>
     </div>
   );
 }
@@ -191,6 +187,11 @@ export default function MeetingPage() {
   const [groupId, setGroupId] = useState<string>("");
   const [meetingStartsAt, setMeetingStartsAt] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+
+  // cores dos times por rodada (para dots)
+  const [matchMetaById, setMatchMetaById] = useState<
+    Record<string, { colorA: string; colorB: string }>
+  >({});
 
   async function loadGroupId() {
     const { data, error } = await supabase
@@ -207,6 +208,26 @@ export default function MeetingPage() {
     const { data: ms, error: e1 } = await supabase.rpc("get_meeting_matches", { p_meeting_id: meetingId });
     if (e1) return alert(e1.message);
     setMatches((ms ?? []) as any);
+
+    // carrega cores dos times por match (para dots nos cards de rodada)
+    const matchIds = (ms ?? []).map((m: any) => m.match_id).filter(Boolean);
+    if (matchIds.length) {
+      const { data: metas, error: em } = await supabase
+        .from("matches")
+        .select("id,team_a_color,team_b_color")
+        .in("id", matchIds);
+
+      if (!em && metas) {
+        const map: Record<string, { colorA: string; colorB: string }> = {};
+        (metas as any[]).forEach((x) => {
+          map[x.id] = {
+            colorA: x.team_a_color ?? "#FACC15",
+            colorB: x.team_b_color ?? "#3B82F6",
+          };
+        });
+        setMatchMetaById(map);
+      }
+    }
 
     const { data: ps, error: e2 } = await supabase.rpc("get_meeting_player_stats", { p_meeting_id: meetingId });
     if (e2) return alert(e2.message);
@@ -368,10 +389,18 @@ export default function MeetingPage() {
       {/* Conteúdo normal (não fica por baixo do sticky) */}
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
         {mvp && (
-          <Card>
+          <Card className="border-yellow-400 bg-yellow-50/10 shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Craque do dia (MVP)</CardTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <span>🏆</span> Craque do dia (MVP)
+                </CardTitle>
+                <Badge variant="outline" className="border-yellow-400/70 text-yellow-400">
+                  MVP
+                </Badge>
+              </div>
             </CardHeader>
+
             <CardContent className="space-y-3">
               <div className="text-2xl font-black">{mvp.player_name}</div>
 
@@ -391,19 +420,26 @@ export default function MeetingPage() {
           </Card>
         )}
 
-        {/* Share */}
+        {/* Share (botão destacado fora do header, tamanho lg) */}
         {top5.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-base">Resumo para compartilhar (Top 5)</CardTitle>
-                <Button onClick={shareTop5PNG} disabled={sharing}>
-                  {sharing ? "Gerando..." : "Compartilhar PNG (Top 5)"}
-                </Button>
-              </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Resumo para compartilhar (Top 5)</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Gera uma imagem 1080×1080 (legível) e abre o compartilhamento no celular.
+
+            <CardContent className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                Gera uma imagem 1080×1080 (legível) e abre o compartilhamento no celular.
+              </div>
+
+              <Button
+                size="lg"
+                className="w-full min-h-[48px]"
+                onClick={shareTop5PNG}
+                disabled={sharing}
+              >
+                {sharing ? "Gerando..." : "Compartilhar PNG (Top 5)"}
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -422,27 +458,38 @@ export default function MeetingPage() {
               <div className="text-sm text-muted-foreground">Sem partidas neste encontro.</div>
             ) : (
               <div className="space-y-2">
-                {matches.map((m) => (
-                  <Card key={m.match_id} className="border">
-                    <CardContent className="p-3 space-y-2">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="text-sm font-semibold text-muted-foreground">Rodada {m.seq}</div>
-                        {statusBadge(m.status)}
-                      </div>
+                {matches.map((m) => {
+                  const metaColors = matchMetaById[m.match_id];
+                  const colorA = metaColors?.colorA ?? "#FACC15";
+                  const colorB = metaColors?.colorB ?? "#3B82F6";
 
-                      <div className="text-lg font-black">
-                        {m.team_a_name} {m.score_a} <span className="text-muted-foreground">x</span> {m.score_b}{" "}
-                        {m.team_b_name}
-                      </div>
+                  return (
+                    <Card key={m.match_id} className="border shadow-sm">
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="text-sm font-semibold text-muted-foreground">Rodada {m.seq}</div>
+                          {statusBadge(m.status)}
+                        </div>
 
-                      <div className="text-xs text-muted-foreground">
-                        <Link className="underline" href={`/match/${m.match_id}/live`}>
-                          Abrir Live
-                        </Link>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        <div className="text-lg font-black flex items-center gap-2 flex-wrap">
+                          <span className="h-2.5 w-2.5 rounded-full border" style={{ background: colorA }} />
+                          <span>{m.team_a_name}</span>
+                          <span className="tabular-nums">{m.score_a}</span>
+                          <span className="text-muted-foreground">x</span>
+                          <span className="tabular-nums">{m.score_b}</span>
+                          <span className="h-2.5 w-2.5 rounded-full border" style={{ background: colorB }} />
+                          <span>{m.team_b_name}</span>
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          <Link className="underline" href={`/match/${m.match_id}/live`}>
+                            Abrir Live
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </CardContent>

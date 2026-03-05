@@ -552,7 +552,8 @@ export default function LiveMatchPage() {
       return `${fmtTime(e.created_at)} • Gol ${badge} ${n(e.player_id)}${assist}${undone}`;
     }
     if (e.type === "SAVE") return `${fmtTime(e.created_at)} • Defesa ${badge} ${n(e.player_id)}${undone}`;
-    if (e.type === "SAVE_HARD") return `${fmtTime(e.created_at)} • Defesa Difícil ${badge} ${n(e.player_id)}${undone}`;
+    if (e.type === "SAVE_HARD")
+      return `${fmtTime(e.created_at)} • Defesa Difícil ${badge} ${n(e.player_id)}${undone}`;
     if (e.type === "SUB")
       return `${fmtTime(e.created_at)} • Sub ${badge} sai ${n(e.out_id)} entra ${n(e.in_id)}${undone}`;
     return `${fmtTime(e.created_at)} • ${e.type}${undone}`;
@@ -613,7 +614,7 @@ export default function LiveMatchPage() {
               <TabsList>
                 <TabsTrigger value="GOAL">Gol</TabsTrigger>
                 <TabsTrigger value="SAVE">Defesa</TabsTrigger>
-                <TabsTrigger value="SAVE_HARD">Defesa Difícil</TabsTrigger>
+                <TabsTrigger value="SAVE_HARD">Difícil</TabsTrigger>
                 <TabsTrigger value="SUB">Sub</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -636,7 +637,7 @@ export default function LiveMatchPage() {
                     key={p.player_id}
                     type="button"
                     variant={selected ? "default" : "outline"}
-                    className="rounded-full"
+                    className="rounded-full min-h-[44px]"
                     onClick={() => {
                       if (mode === "GOAL") {
                         if (!scorer || scorer !== p.player_id) {
@@ -672,7 +673,7 @@ export default function LiveMatchPage() {
                 <Button
                   type="button"
                   variant={!assist ? "default" : "outline"}
-                  className="rounded-full"
+                  className="rounded-full min-h-[44px]"
                   onClick={() => setAssist("")}
                 >
                   Sem assist
@@ -685,7 +686,7 @@ export default function LiveMatchPage() {
                       key={p.player_id}
                       type="button"
                       variant={assist === p.player_id ? "default" : "outline"}
-                      className="rounded-full"
+                      className="rounded-full min-h-[44px]"
                       onClick={() => setAssist(assist === p.player_id ? "" : p.player_id)}
                     >
                       {p.players?.name ?? p.player_id}
@@ -704,7 +705,7 @@ export default function LiveMatchPage() {
                     key={p.player_id}
                     type="button"
                     variant={subIn === p.player_id ? "default" : "outline"}
-                    className="rounded-full"
+                    className="rounded-full min-h-[44px]"
                     onClick={() => setSubIn(subIn === p.player_id ? "" : p.player_id)}
                   >
                     {p.players?.name ?? p.player_id}
@@ -718,7 +719,7 @@ export default function LiveMatchPage() {
 
           {mode === "GOAL" && (
             <Button
-              className="w-full"
+              className="w-full min-h-[44px]"
               disabled={!canEdit || !scorer}
               onClick={async () => {
                 if (!scorer) return;
@@ -732,7 +733,7 @@ export default function LiveMatchPage() {
 
           {mode === "SAVE" && (
             <Button
-              className="w-full"
+              className="w-full min-h-[44px]"
               disabled={!canEdit || !saver}
               onClick={async () => {
                 if (!saver) return;
@@ -746,7 +747,7 @@ export default function LiveMatchPage() {
 
           {mode === "SAVE_HARD" && (
             <Button
-              className="w-full"
+              className="w-full min-h-[44px]"
               disabled={!canEdit || !saver}
               onClick={async () => {
                 if (!saver) return;
@@ -760,7 +761,7 @@ export default function LiveMatchPage() {
 
           {mode === "SUB" && (
             <Button
-              className="w-full"
+              className="w-full min-h-[44px]"
               disabled={!canEdit || !subOut || !subIn}
               onClick={async () => {
                 await ensureNames([subOut, subIn]);
@@ -785,16 +786,19 @@ export default function LiveMatchPage() {
           <div className="space-y-2">
             <div className="text-xs font-black">STATS (EM QUADRA)</div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* sempre 2 colunas */}
+            <div className="grid grid-cols-2 gap-2">
               {onCourt.map((p) => {
-                const s = stats[p.player_id] ?? ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as any);
+                const s =
+                  stats[p.player_id] ??
+                  ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as any);
                 const name = p.players?.name ?? p.player_id;
 
                 return (
                   <Card key={p.player_id} className={CARD_SURFACE_STATIC}>
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="font-black leading-tight">{name}</div>
+                        <div className="font-black leading-tight line-clamp-2">{name}</div>
                         <Badge variant="secondary">{p.players?.preferred_pos ?? "-"}</Badge>
                       </div>
 
@@ -817,7 +821,7 @@ export default function LiveMatchPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Header sticky (compacto) */}
+      {/* Header sticky (reduzido) */}
       <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
         <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
           <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -838,7 +842,8 @@ export default function LiveMatchPage() {
                 )}
               </div>
 
-              <div className="text-3xl font-black tracking-tight">
+              {/* placar menor no mobile */}
+              <div className="text-2xl sm:text-3xl font-black tracking-tight">
                 {meta.teamA} {scoreA} <span className="text-muted-foreground">x</span> {scoreB} {meta.teamB}
               </div>
             </div>
@@ -847,10 +852,20 @@ export default function LiveMatchPage() {
               <CardContent className="p-2">
                 <div className="flex items-center gap-2">
                   <div className="font-black tabular-nums">{fmt(timerMs)}</div>
-                  <Button variant="outline" size="sm" onClick={() => setTimerRunning((v) => !v)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-[36px]"
+                    onClick={() => setTimerRunning((v) => !v)}
+                  >
                     {timerRunning ? "Pausar" : "Iniciar"}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setTimerMs(0)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-[36px]"
+                    onClick={() => setTimerMs(0)}
+                  >
                     Zerar
                   </Button>
                 </div>
@@ -858,22 +873,37 @@ export default function LiveMatchPage() {
             </Card>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-            <Button className="shrink-0" variant="outline" onClick={undoLast} disabled={!canEdit}>
-              Desfazer
-            </Button>
-
-            <Button className="shrink-0" onClick={nextRoundSameTeams} disabled={!canEdit}>
-              Próxima (mesmos)
-            </Button>
-
-            <Button className="shrink-0" variant="outline" onClick={endThisMatch} disabled={!canEdit}>
+          {/* ações: sem scroll horizontal; críticos destacados */}
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="destructive"
+              className="min-h-[44px]"
+              onClick={endThisMatch}
+              disabled={!canEdit}
+            >
               Encerrar
             </Button>
 
+            <Button
+              variant="outline"
+              className="min-h-[44px] border-destructive text-destructive hover:text-destructive"
+              onClick={undoLast}
+              disabled={!canEdit}
+            >
+              Desfazer
+            </Button>
+
+            <Button className="min-h-[44px]" onClick={nextRoundSameTeams} disabled={!canEdit}>
+              Próxima
+            </Button>
+
             {hasTeamC && (
-              <Button className="shrink-0" variant="outline" onClick={() => setShowRotation((v) => !v)}>
-                Rotação
+              <Button
+                className="col-span-3 min-h-[44px]"
+                variant="outline"
+                onClick={() => setShowRotation((v) => !v)}
+              >
+                Rotação (3 times)
               </Button>
             )}
           </div>
@@ -910,8 +940,10 @@ export default function LiveMatchPage() {
                 onChange={(e) => setPinInput(e.target.value)}
               />
 
-              <Button onClick={unlockEdit}>Liberar</Button>
-              <Button variant="outline" onClick={lockEdit}>
+              <Button className="min-h-[44px]" onClick={unlockEdit}>
+                Liberar
+              </Button>
+              <Button className="min-h-[44px]" variant="outline" onClick={lockEdit}>
                 Bloquear
               </Button>
 
@@ -977,7 +1009,7 @@ export default function LiveMatchPage() {
                 </div>
               </div>
 
-              <Button className="w-full" onClick={nextRoundRotation} disabled={!canEdit}>
+              <Button className="w-full min-h-[44px]" onClick={nextRoundRotation} disabled={!canEdit}>
                 Encerrar 10min e iniciar próxima (rotação)
               </Button>
             </CardContent>
@@ -1001,8 +1033,9 @@ export default function LiveMatchPage() {
               <div className="mt-2 text-5xl font-black tabular-nums">{scoreB}</div>
             </div>
 
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 bg-white/70" />
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white/70" />
+            {/* linha + círculo mais grossos no mobile */}
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-white/70" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white/70" />
           </div>
         </Card>
 
@@ -1011,7 +1044,7 @@ export default function LiveMatchPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">Últimos eventos</CardTitle>
-              <Button variant="outline" size="sm" onClick={loadRecentEvents}>
+              <Button variant="outline" size="sm" className="min-h-[36px]" onClick={loadRecentEvents}>
                 Atualizar
               </Button>
             </div>
@@ -1135,12 +1168,12 @@ export default function LiveMatchPage() {
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1" onClick={() => setConfirm(null)}>
+            <Button variant="outline" className="flex-1 min-h-[44px]" onClick={() => setConfirm(null)}>
               Cancelar
             </Button>
 
             <Button
-              className="flex-1"
+              className="flex-1 min-h-[44px]"
               onClick={async () => {
                 const c = confirm;
                 setConfirm(null);
