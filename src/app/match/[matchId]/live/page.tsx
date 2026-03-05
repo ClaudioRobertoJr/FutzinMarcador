@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 
 type Side3 = "A" | "B" | "C";
 type TeamSide = "A" | "B";
-type TeamMode = "GOAL" | "SAVE" | "SUB";
+type TeamMode = "GOAL" | "SAVE" | "SAVE_HARD" | "SUB";
 type Pos = "GK" | "FIXO" | "ALA_E" | "ALA_D" | "PIVO";
 
 type RosterRow = {
@@ -31,12 +31,14 @@ type StatRow = {
   goals: number;
   assists: number;
   saves: number;
+  hard_saves: number;
+  goals_against?: number;
 };
 
 type RecentEvent = {
   id: string;
   created_at: string;
-  type: "GOAL" | "SAVE" | "SUB";
+  type: "GOAL" | "SAVE" | "SAVE_HARD" | "SUB";
   side: TeamSide | null;
   player_id: string | null;
   assist_id: string | null;
@@ -98,6 +100,7 @@ export default function LiveMatchPage() {
     | null
     | { kind: "GOAL"; side: TeamSide; playerId: string; assistId: string | null }
     | { kind: "SAVE"; side: TeamSide; playerId: string }
+    | { kind: "SAVE_HARD"; side: TeamSide; playerId: string }
     | { kind: "SUB"; side: TeamSide; outId: string; inId: string }
   >(null);
 
@@ -243,7 +246,7 @@ export default function LiveMatchPage() {
   async function loadStats() {
     const { data, error } = await supabase
       .from("v_match_player_stats")
-      .select("match_id,player_id,goals,assists,saves")
+      .select("match_id,player_id,goals,assists,saves,hard_saves")
       .eq("match_id", matchId);
 
     if (error) return;
@@ -356,6 +359,22 @@ export default function LiveMatchPage() {
     if (!playerId) return;
 
     const { error } = await supabase.rpc("add_save_event", {
+      p_match_id: matchId,
+      p_side: side,
+      p_player_id: playerId,
+      p_pin: pinInput,
+    });
+    if (error) return alert(error.message);
+
+    await loadStats();
+    await loadRecentEvents();
+  }
+
+  async function addHardSave(side: TeamSide, playerId: string) {
+    if (!canEdit) return;
+    if (!playerId) return;
+
+    const { error } = await supabase.rpc("add_hard_save_event", {
       p_match_id: matchId,
       p_side: side,
       p_player_id: playerId,
@@ -533,6 +552,7 @@ export default function LiveMatchPage() {
       return `${fmtTime(e.created_at)} • Gol ${badge} ${n(e.player_id)}${assist}${undone}`;
     }
     if (e.type === "SAVE") return `${fmtTime(e.created_at)} • Defesa ${badge} ${n(e.player_id)}${undone}`;
+    if (e.type === "SAVE_HARD") return `${fmtTime(e.created_at)} • Defesa Difícil ${badge} ${n(e.player_id)}${undone}`;
     if (e.type === "SUB")
       return `${fmtTime(e.created_at)} • Sub ${badge} sai ${n(e.out_id)} entra ${n(e.in_id)}${undone}`;
     return `${fmtTime(e.created_at)} • ${e.type}${undone}`;
@@ -593,6 +613,7 @@ export default function LiveMatchPage() {
               <TabsList>
                 <TabsTrigger value="GOAL">Gol</TabsTrigger>
                 <TabsTrigger value="SAVE">Defesa</TabsTrigger>
+                <TabsTrigger value="SAVE_HARD">Defesa Difícil</TabsTrigger>
                 <TabsTrigger value="SUB">Sub</TabsTrigger>
               </TabsList>
             </Tabs>
@@ -607,7 +628,7 @@ export default function LiveMatchPage() {
                 const name = p.players?.name ?? p.player_id;
                 const selected =
                   (mode === "GOAL" && scorer === p.player_id) ||
-                  (mode === "SAVE" && saver === p.player_id) ||
+                  ((mode === "SAVE" || mode === "SAVE_HARD") && saver === p.player_id) ||
                   (mode === "SUB" && subOut === p.player_id);
 
                 return (
@@ -627,7 +648,7 @@ export default function LiveMatchPage() {
                         setAssist("");
                         return;
                       }
-                      if (mode === "SAVE") {
+                      if (mode === "SAVE" || mode === "SAVE_HARD") {
                         setSaver(saver === p.player_id ? "" : p.player_id);
                         return;
                       }
@@ -723,6 +744,20 @@ export default function LiveMatchPage() {
             </Button>
           )}
 
+          {mode === "SAVE_HARD" && (
+            <Button
+              className="w-full"
+              disabled={!canEdit || !saver}
+              onClick={async () => {
+                if (!saver) return;
+                await ensureNames([saver]);
+                setConfirm({ kind: "SAVE_HARD", side, playerId: saver });
+              }}
+            >
+              Registrar Defesa Difícil ({side})
+            </Button>
+          )}
+
           {mode === "SUB" && (
             <Button
               className="w-full"
@@ -752,7 +787,7 @@ export default function LiveMatchPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {onCourt.map((p) => {
-                const s = stats[p.player_id] ?? ({ goals: 0, assists: 0, saves: 0 } as any);
+                const s = stats[p.player_id] ?? ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as any);
                 const name = p.players?.name ?? p.player_id;
 
                 return (
@@ -767,6 +802,7 @@ export default function LiveMatchPage() {
                         <StatMini label="G" value={s.goals ?? 0} />
                         <StatMini label="A" value={s.assists ?? 0} />
                         <StatMini label="D" value={s.saves ?? 0} />
+                        <StatMini label="DD" value={s.hard_saves ?? 0} />
                       </div>
                     </CardContent>
                   </Card>
@@ -1084,6 +1120,12 @@ export default function LiveMatchPage() {
               </>
             )}
 
+            {confirm?.kind === "SAVE_HARD" && (
+              <>
+                Defesa Difícil ({confirm.side}) de <b>{nameById[confirm.playerId] ?? confirm.playerId}</b>
+              </>
+            )}
+
             {confirm?.kind === "SUB" && (
               <>
                 Sub ({confirm.side}) sai <b>{nameById[confirm.outId] ?? confirm.outId}</b> entra{" "}
@@ -1106,6 +1148,7 @@ export default function LiveMatchPage() {
 
                 if (c.kind === "GOAL") await addGoal(c.side, c.playerId, c.assistId || undefined);
                 if (c.kind === "SAVE") await addSave(c.side, c.playerId);
+                if (c.kind === "SAVE_HARD") await addHardSave(c.side, c.playerId);
                 if (c.kind === "SUB") await doSub(c.side, c.outId, c.inId);
               }}
             >

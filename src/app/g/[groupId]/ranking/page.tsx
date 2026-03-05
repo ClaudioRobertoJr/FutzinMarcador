@@ -10,13 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Period = "MONTH" | "QUARTER" | "YEAR";
 type TypeFilter = "ALL" | "FIXO" | "COMPLETE";
@@ -27,8 +21,9 @@ type Row = {
   goals: number;
   assists: number;
   saves: number;
-  goals_against: number;
-  points: number;
+  hard_saves?: number; // DD
+  goals_against?: number; // pode vir, mas não entra no cálculo
+  points: number; // recalculado no front
 };
 
 function cn(...xs: Array<string | false | null | undefined>) {
@@ -42,6 +37,11 @@ function StatBox({ label, value }: { label: string; value: number }) {
       <div className="text-sm font-black">{value}</div>
     </div>
   );
+}
+
+function calcPoints(goals: number, assists: number, saves: number, hard_saves: number) {
+  const pts = goals * 2 + assists * 1 + saves * 0.25 + hard_saves * 1;
+  return Number(pts.toFixed(2));
 }
 
 export default function RankingPage() {
@@ -65,16 +65,13 @@ export default function RankingPage() {
 
       if (error) return alert(error.message);
 
-      let list = (data ?? []) as Row[];
+      let list = (data ?? []) as any[];
 
       // filtro por tipo (FIXO/COMPLETE)
       if (typeFilter !== "ALL") {
         const ids = list.map((r) => r.player_id);
         if (ids.length > 0) {
-          const { data: ps, error: ep } = await supabase
-            .from("players")
-            .select("id,type")
-            .in("id", ids);
+          const { data: ps, error: ep } = await supabase.from("players").select("id,type").in("id", ids);
 
           if (!ep && ps) {
             const typeById: Record<string, string> = {};
@@ -84,7 +81,26 @@ export default function RankingPage() {
         }
       }
 
-      setRows(list);
+      // Recalcula points no front (ignora points antigo da RPC)
+      list = list.map((r: any) => {
+        const goals = Number(r.goals ?? 0);
+        const assists = Number(r.assists ?? 0);
+        const saves = Number(r.saves ?? 0);
+        const hard_saves = Number(r.hard_saves ?? 0);
+        const goals_against = r.goals_against != null ? Number(r.goals_against) : undefined;
+
+        return {
+          ...r,
+          goals,
+          assists,
+          saves,
+          hard_saves,
+          goals_against,
+          points: calcPoints(goals, assists, saves, hard_saves),
+        } as Row;
+      });
+
+      setRows(list as any);
     } finally {
       setLoading(false);
     }
@@ -97,10 +113,11 @@ export default function RankingPage() {
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => {
-      if ((b.points ?? 0) !== (a.points ?? 0)) return (b.points ?? 0) - (a.points ?? 0);
-      if ((b.goals ?? 0) !== (a.goals ?? 0)) return (b.goals ?? 0) - (a.goals ?? 0);
-      if ((b.assists ?? 0) !== (a.assists ?? 0)) return (b.assists ?? 0) - (a.assists ?? 0);
-      return (b.saves ?? 0) - (a.saves ?? 0);
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.goals !== a.goals) return b.goals - a.goals;
+      if (b.assists !== a.assists) return b.assists - a.assists;
+      if ((b.hard_saves ?? 0) !== (a.hard_saves ?? 0)) return (b.hard_saves ?? 0) - (a.hard_saves ?? 0);
+      return b.saves - a.saves;
     });
   }, [rows]);
 
@@ -111,7 +128,7 @@ export default function RankingPage() {
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <div className="text-xs text-muted-foreground">Ranking</div>
-              <div className="text-xl font-black">Pontos / Gols / Assists / Defesas</div>
+              <div className="text-xl font-black">Pontos / Gols / Assists / Defesas / DD</div>
             </div>
 
             <Button asChild variant="outline">
@@ -155,9 +172,7 @@ export default function RankingPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Tabela</CardTitle>
-              <Badge variant="outline">
-                {loading ? "carregando..." : `${sorted.length} jogadores`}
-              </Badge>
+              <Badge variant="outline">{loading ? "carregando..." : `${sorted.length} jogadores`}</Badge>
             </div>
           </CardHeader>
 
@@ -180,11 +195,12 @@ export default function RankingPage() {
                           <div className="font-black">{r.points} pts</div>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-5 gap-2">
                           <StatBox label="Pts" value={r.points ?? 0} />
                           <StatBox label="Gols" value={r.goals ?? 0} />
                           <StatBox label="Ass" value={r.assists ?? 0} />
                           <StatBox label="Def" value={r.saves ?? 0} />
+                          <StatBox label="DD" value={Number(r.hard_saves ?? 0)} />
                         </div>
                       </CardContent>
                     </Card>
@@ -193,7 +209,7 @@ export default function RankingPage() {
 
                 {/* Desktop: tabela */}
                 <div className="hidden md:block overflow-auto">
-                  <table className="min-w-[760px] w-full text-left border-collapse">
+                  <table className="min-w-[860px] w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b text-muted-foreground">
                         <th className="py-2 pr-3">#</th>
@@ -202,6 +218,7 @@ export default function RankingPage() {
                         <th className="py-2 pr-3">Gols</th>
                         <th className="py-2 pr-3">Assists</th>
                         <th className="py-2 pr-3">Defesas</th>
+                        <th className="py-2 pr-3">DD</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -213,6 +230,7 @@ export default function RankingPage() {
                           <td className="py-2 pr-3">{r.goals ?? 0}</td>
                           <td className="py-2 pr-3">{r.assists ?? 0}</td>
                           <td className="py-2 pr-3">{r.saves ?? 0}</td>
+                          <td className="py-2 pr-3">{Number(r.hard_saves ?? 0)}</td>
                         </tr>
                       ))}
                     </tbody>
