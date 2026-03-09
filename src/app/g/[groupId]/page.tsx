@@ -356,7 +356,7 @@ export default function GroupPage() {
       alert(error.message);
       return false;
     }
-    return !ok;
+    return !!ok; // true = PIN válido
   }
 
   async function loadPinState() {

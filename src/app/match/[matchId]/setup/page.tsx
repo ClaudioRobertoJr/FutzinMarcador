@@ -211,6 +211,7 @@ export default function MatchSetupPage() {
 
   // PIN
   const [pinInput, setPinInput] = useState("");
+
   const [canEdit, setCanEdit] = useState(false);
 
   // meta editável
@@ -236,21 +237,21 @@ export default function MatchSetupPage() {
     return `pin:${gid}`;
   }
 
-  async function validatePinForGroup(gid: string, pin: string): Promise<boolean> {
-    const { data: ok, error } = await supabase.rpc("check_edit_pin_for_group", {
-      p_group_id: gid,
+  async function validatePin(pin: string): Promise<boolean> {
+    const { data: ok, error } = await supabase.rpc("check_edit_pin_for_match", {
+      p_match_id: matchId,
       p_pin: pin,
     });
     if (error) {
       alert(error.message);
       return false;
     }
-    return !ok;
+    return !!ok; // true = PIN válido
   }
 
   async function unlockEdit() {
     if (!groupId) return;
-    const ok = await validatePinForGroup(groupId, pinInput);
+    const ok = await validatePin(pinInput);
     if (ok) {
       localStorage.setItem(pinKey(groupId), pinInput);
       setCanEdit(true);
@@ -300,9 +301,11 @@ export default function MatchSetupPage() {
     setGroupId(gid);
 
     const savedPin = localStorage.getItem(pinKey(gid)) || "";
-    setPinInput(savedPin);
-    const ok = await validatePinForGroup(gid, savedPin);
-    setCanEdit(ok);
+    if (savedPin) {
+      setPinInput(savedPin);
+      const ok = await validatePin(savedPin);
+      setCanEdit(ok);
+    }
 
     // Carrega todos os jogadores ativos do grupo
     const { data: ps, error: ep } = await supabase
