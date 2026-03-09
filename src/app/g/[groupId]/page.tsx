@@ -88,11 +88,13 @@ function StatPill({ label, value }: { label: string; value: number }) {
 
 function PlayerCard({
   p,
+  groupId,  
   canEdit,
   pinInput,
   onSaved,
 }: {
   p: Player;
+  groupId: string; 
   canEdit: boolean;
   pinInput: string;
   onSaved: () => Promise<void>;
@@ -191,16 +193,27 @@ function PlayerCard({
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 shrink-0"
-            disabled={!canEdit}
-            onClick={() => setOpen((v) => !v)}
-            type="button"
-          >
-            {open ? "Fechar" : "Editar"}
-          </Button>
+          <div className="flex gap-1.5 shrink-0">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-9 px-2 text-muted-foreground hover:text-foreground"
+              title="Ver histórico"
+            >
+              <Link href={`/g/${groupId}/player/${p.id}`}>📊</Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0"
+              disabled={!canEdit}
+              onClick={() => setOpen((v) => !v)}
+              type="button"
+            >
+              {open ? "Fechar" : "Editar"}
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -576,13 +589,13 @@ export default function GroupPage() {
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
-                Nenhuma partida em andamento. Crie um encontro para começar.
+                Nenhuma partida em andamento. Crie um jogo para começar.
               </div>
             )}
 
             <div className="grid md:grid-cols-3 gap-2">
               <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
-                Criar encontro + partida
+                Criar partida
               </Button>
               <Button asChild variant="outline" className="h-12" disabled={!matchId}>
                 <Link href={matchId ? `/match/${matchId}/setup` : "#"} aria-disabled={!matchId}>
@@ -599,7 +612,7 @@ export default function GroupPage() {
             {meetingId && (
               <div className="text-sm">
                 <Link className="underline" href={`/meeting/${meetingId}`}>
-                  Ver resumo do encontro (craque do dia)
+                  Ver resumo do jogo (craque do dia)
                 </Link>
               </div>
             )}
@@ -691,6 +704,7 @@ export default function GroupPage() {
                   <PlayerCard
                     key={p.id}
                     p={p}
+                     groupId={groupId}
                     canEdit={canEdit}
                     pinInput={pinInput}
                     onSaved={loadPlayers}

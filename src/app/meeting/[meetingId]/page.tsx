@@ -101,7 +101,7 @@ function ShareTop5CardCapture({
         <div>
           <div style={{ fontSize: 22, opacity: 0.85 }}>Futzin Marcador</div>
           <div style={{ fontSize: 64, fontWeight: 900, marginTop: 6, lineHeight: 1.05 }}>Top 5 do</div>
-          <div style={{ fontSize: 64, fontWeight: 900, lineHeight: 1.05 }}>Encontro</div>
+          <div style={{ fontSize: 64, fontWeight: 900, lineHeight: 1.05 }}>Jogo</div>
           <div style={{ fontSize: 28, opacity: 0.85, marginTop: 10 }}>{dateLabel}</div>
         </div>
 
@@ -357,7 +357,7 @@ export default function MeetingPage() {
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <div className="text-xs text-muted-foreground">Encontro</div>
+              <div className="text-xs text-muted-foreground">Jogo</div>
               <div className="text-xl font-black">Resumo</div>
               {meetingStartsAt && (
                 <div className="text-xs text-muted-foreground mt-1">Data: {fmtDateTimeBR(meetingStartsAt)}</div>
@@ -455,7 +455,7 @@ export default function MeetingPage() {
 
           <CardContent>
             {matches.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Sem partidas neste encontro.</div>
+              <div className="text-sm text-muted-foreground">Sem partidas neste Jogo.</div>
             ) : (
               <div className="space-y-2">
                 {matches.map((m) => {
@@ -499,7 +499,7 @@ export default function MeetingPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-lg">Stats do encontro</CardTitle>
+              <CardTitle className="text-lg">Stats da partida</CardTitle>
               <Badge variant="outline">{stats.length} jogador(es)</Badge>
             </div>
           </CardHeader>

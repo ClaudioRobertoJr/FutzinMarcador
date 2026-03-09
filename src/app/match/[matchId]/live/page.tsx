@@ -1315,7 +1315,7 @@ export default function LiveMatchPage() {
             )}
 
             <Button className="w-full min-h-[44px]" variant="destructive" onClick={endThisMatch}>
-              🏁 Encerrar encontro
+              🏁 Encerrar jogo
             </Button>
           </div>
         </div>
