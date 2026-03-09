@@ -49,7 +49,6 @@ type RecentEvent = {
 
 const CARD_SURFACE =
   "border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60";
-const CARD_SURFACE_STATIC = "border bg-card/50";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -106,19 +105,49 @@ function StatMini({ label, value }: { label: string; value: number }) {
   );
 }
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
+// ─── Toast com botão de Desfazer ──────────────────────────────────────────────
+// CORREÇÃO: toast agora exibe botão de desfazer imediatamente após um gol,
+// dando 5s para o usuário cancelar sem precisar procurar o botão na tela.
 
-function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
+function Toast({
+  msg,
+  onDone,
+  onUndo,
+}: {
+  msg: string;
+  onDone: () => void;
+  onUndo?: (() => Promise<void>) | null;
+}) {
+  const [undoing, setUndoing] = useState(false);
+
   useEffect(() => {
-    const t = setTimeout(onDone, 2400);
+    if (undoing) return; // se vai desfazer, não auto-fecha
+    // CORREÇÃO: aumentado para 5s quando tem undo disponível, 2.4s sem undo
+    const t = setTimeout(onDone, onUndo ? 5000 : 2400);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, [onDone, onUndo, undoing]);
+
+  async function handleUndo() {
+    if (!onUndo) return;
+    setUndoing(true);
+    await onUndo();
+    onDone();
+  }
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="rounded-2xl border bg-card px-5 py-3 shadow-xl text-sm font-semibold flex items-center gap-2">
+      <div className="rounded-2xl border bg-card px-4 py-3 shadow-xl text-sm font-semibold flex items-center gap-3">
         <span className="text-base">⚽</span>
-        {msg}
+        <span>{msg}</span>
+        {onUndo && !undoing && (
+          <button
+            onClick={handleUndo}
+            className="ml-1 rounded-lg bg-destructive/10 text-destructive px-3 py-1 text-xs font-bold hover:bg-destructive/20 transition-colors"
+          >
+            Desfazer
+          </button>
+        )}
+        {undoing && <span className="text-xs text-muted-foreground">Desfazendo...</span>}
       </div>
     </div>
   );
@@ -129,22 +158,25 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
 export default function LiveMatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
 
-  // ── confirmação (modal) ──
+  // ── confirmação (modal apenas para SUB) ──
+  // CORREÇÃO: removido SAVE e SAVE_HARD do modal — registram direto como o GOL
   const [confirm, setConfirm] = useState<
     | null
-    | { kind: "GOAL"; side: TeamSide; playerId: string; assistId: string | null }
-    | { kind: "SAVE"; side: TeamSide; playerId: string }
-    | { kind: "SAVE_HARD"; side: TeamSide; playerId: string }
     | { kind: "SUB"; side: TeamSide; outId: string; inId: string }
   >(null);
 
-  // ── toast ──
-  const [toast, setToast] = useState<string | null>(null);
-  const showToast = useCallback((msg: string) => setToast(msg), []);
+  // ── toast com suporte a undo ──
+  const [toast, setToast] = useState<{ msg: string; undoFn?: (() => Promise<void>) | null } | null>(null);
+  const showToast = useCallback(
+    (msg: string, undoFn?: (() => Promise<void>) | null) => setToast({ msg, undoFn }),
+    []
+  );
 
   // ── PIN ──
   const [groupId, setGroupId] = useState("");
   const [pinInput, setPinInput] = useState("");
+  // CORREÇÃO: canEdit inicia true se houver PIN no localStorage (otimista)
+  // e é corrigido após validação assíncrona, evitando flash de botões desabilitados
   const [canEdit, setCanEdit] = useState(false);
 
   // ── match info ──
@@ -154,13 +186,15 @@ export default function LiveMatchPage() {
   });
 
   // ── timer persistido ──
-  // timerOriginMs: timestamp (Date.now()) de quando o timer foi iniciado pela última vez
-  // timerAccMs: tempo acumulado antes da última pausa
+  // CORREÇÃO: timer agora sincroniza com o banco via set_match_timer,
+  // permitindo que outros dispositivos vejam o mesmo timer
   const [timerOriginMs, setTimerOriginMs] = useState<number | null>(null);
   const [timerAccMs, setTimerAccMs] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [displayMs, setDisplayMs] = useState(0);
   const timerKey = `timer:${matchId}`;
+  // ref para evitar sincronizar com o banco em loop quando chega update via realtime
+  const timerSyncInProgress = useRef(false);
 
   // ── score + roster + stats ──
   const [scoreA, setScoreA] = useState(0);
@@ -214,7 +248,6 @@ export default function LiveMatchPage() {
   const benchA = useMemo(() => roster.filter((r) => r.side === "A" && r.state === "BENCH"), [roster]);
   const benchB = useMemo(() => roster.filter((r) => r.side === "B" && r.state === "BENCH"), [roster]);
 
-  // ── mini-ranking (todos os jogadores com stats, ordenado por gols) ──
   const allRoster = useMemo(() => roster.filter((r) => r.side === "A" || r.side === "B"), [roster]);
   const topScorers = useMemo(() => {
     return allRoster
@@ -234,33 +267,75 @@ export default function LiveMatchPage() {
       .sort((a, b) => b.goals - a.goals || b.assists - a.assists);
   }, [allRoster, stats]);
 
+  const winner = useMemo(() => {
+    if (scoreA > scoreB) return "A";
+    if (scoreB > scoreA) return "B";
+    return null;
+  }, [scoreA, scoreB]);
+
   // ─────────────────────────────────────────────────────────────────────────────
-  // Timer persistido via localStorage
+  // Timer — localStorage + sincronização com banco
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // Carrega estado do timer do localStorage ao montar
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(timerKey);
-      if (saved) {
-        const { acc, origin, running } = JSON.parse(saved);
-        setTimerAccMs(acc ?? 0);
-        setTimerOriginMs(origin ?? null);
-        setTimerRunning(!!running);
+    // 1) tenta carregar do banco primeiro (para suporte multi-device)
+    async function loadTimerFromDB() {
+      const { data, error } = await supabase
+        .from("matches")
+        .select("timer_acc_ms,timer_started_at")
+        .eq("id", matchId)
+        .single();
+
+      if (!error && data) {
+        const accMs = data.timer_acc_ms ?? 0;
+        const startedAt = data.timer_started_at ? new Date(data.timer_started_at).getTime() : null;
+        const running = startedAt !== null;
+
+        setTimerAccMs(accMs);
+        setTimerOriginMs(startedAt);
+        setTimerRunning(running);
+        // atualiza localStorage como cache local
+        persistTimerLocal(accMs, startedAt, running);
+        return;
       }
-    } catch {}
+
+      // 2) fallback: localStorage se banco falhar
+      try {
+        const saved = localStorage.getItem(timerKey);
+        if (saved) {
+          const { acc, origin, running } = JSON.parse(saved);
+          setTimerAccMs(acc ?? 0);
+          setTimerOriginMs(origin ?? null);
+          setTimerRunning(!!running);
+        }
+      } catch {}
+    }
+
+    loadTimerFromDB();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId]);
 
-  // Persiste mudanças no timer
-  const persistTimer = useCallback(
-    (acc: number, origin: number | null, running: boolean) => {
-      try {
-        localStorage.setItem(timerKey, JSON.stringify({ acc, origin, running }));
-      } catch {}
-    },
-    [timerKey]
-  );
+  function persistTimerLocal(acc: number, origin: number | null, running: boolean) {
+    try {
+      localStorage.setItem(timerKey, JSON.stringify({ acc, origin, running }));
+    } catch {}
+  }
+
+  async function persistTimer(acc: number, origin: number | null, running: boolean) {
+    persistTimerLocal(acc, origin, running);
+    // sincroniza com banco se tiver PIN (somente editor pode mudar timer)
+    if (!canEdit || !pinInput) return;
+    timerSyncInProgress.current = true;
+    try {
+      await supabase.rpc("set_match_timer", {
+        p_match_id: matchId,
+        p_acc_ms: acc,
+        p_started_at: origin ? new Date(origin).toISOString() : null,
+        p_pin: pinInput,
+      });
+    } catch {}
+    timerSyncInProgress.current = false;
+  }
 
   // Display tick
   useEffect(() => {
@@ -277,30 +352,28 @@ export default function LiveMatchPage() {
     return () => clearInterval(id);
   }, [timerRunning, timerOriginMs, timerAccMs]);
 
-  function handleTimerToggle() {
+  async function handleTimerToggle() {
     if (timerRunning) {
-      // Pausar: acumula tempo corrido
       const elapsed = timerOriginMs !== null ? Date.now() - timerOriginMs : 0;
       const newAcc = timerAccMs + elapsed;
       setTimerAccMs(newAcc);
       setTimerOriginMs(null);
       setTimerRunning(false);
-      persistTimer(newAcc, null, false);
+      await persistTimer(newAcc, null, false);
     } else {
-      // Iniciar
       const origin = Date.now();
       setTimerOriginMs(origin);
       setTimerRunning(true);
-      persistTimer(timerAccMs, origin, true);
+      await persistTimer(timerAccMs, origin, true);
     }
   }
 
-  function handleTimerReset() {
+  async function handleTimerReset() {
     setTimerAccMs(0);
     setTimerOriginMs(null);
     setTimerRunning(false);
     setDisplayMs(0);
-    persistTimer(0, null, false);
+    await persistTimer(0, null, false);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -317,13 +390,14 @@ export default function LiveMatchPage() {
       p_group_id: groupId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    // CORREÇÃO: usa showToast em vez de alert() nativo (quebra PWA no iOS)
+    if (error) return showToast("Erro ao validar PIN");
     if (ok) {
       localStorage.setItem(pinKey(groupId), pinInput);
       setCanEdit(true);
     } else {
       setCanEdit(false);
-      alert("PIN incorreto.");
+      showToast("PIN incorreto ❌");
     }
   }
 
@@ -397,12 +471,13 @@ export default function LiveMatchPage() {
     const evs = (data ?? []) as any[];
     setRecent(evs as RecentEvent[]);
 
+    // CORREÇÃO: só busca nomes que ainda não estão no cache
     const ids = new Set<string>();
     for (const e of evs) {
-      if (e.player_id) ids.add(e.player_id);
-      if (e.assist_id) ids.add(e.assist_id);
-      if (e.out_id) ids.add(e.out_id);
-      if (e.in_id) ids.add(e.in_id);
+      if (e.player_id && !nameById[e.player_id]) ids.add(e.player_id);
+      if (e.assist_id && !nameById[e.assist_id]) ids.add(e.assist_id);
+      if (e.out_id && !nameById[e.out_id]) ids.add(e.out_id);
+      if (e.in_id && !nameById[e.in_id]) ids.add(e.in_id);
     }
     if (ids.size === 0) return;
 
@@ -413,20 +488,22 @@ export default function LiveMatchPage() {
     setNameById((prev) => ({ ...prev, ...map }));
   }
 
+  // CORREÇÃO: loadGroupAndValidatePin agora inicia canEdit=true otimisticamente
+  // se houver PIN salvo, e corrige após validação assíncrona
   async function loadGroupAndValidatePin() {
     const { data: ma, error: ema } = await supabase
       .from("matches")
       .select("meeting_id")
       .eq("id", matchId)
       .single();
-    if (ema) return alert(ema.message);
+    if (ema) return;
 
     const { data: meet, error: em } = await supabase
       .from("meetings")
       .select("group_id")
       .eq("id", ma.meeting_id)
       .single();
-    if (em) return alert(em.message);
+    if (em) return;
 
     const gid = meet.group_id as string;
     setGroupId(gid);
@@ -434,12 +511,14 @@ export default function LiveMatchPage() {
     const saved = localStorage.getItem(pinKey(gid)) || "";
     setPinInput(saved);
 
-    const { data: ok, error } = await supabase.rpc("check_edit_pin_for_group", {
+    // otimista: assume válido enquanto valida
+    if (saved) setCanEdit(true);
+
+    const { data: ok } = await supabase.rpc("check_edit_pin_for_group", {
       p_group_id: gid,
       p_pin: saved,
     });
-    if (error) return alert(error.message);
-    setCanEdit(!!ok); // true = PIN válido
+    setCanEdit(!!ok);
   }
 
   async function ensureNames(ids: Array<string | null | undefined>) {
@@ -466,14 +545,18 @@ export default function LiveMatchPage() {
       p_assist_id: finalAssist,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    // CORREÇÃO: usa toast em vez de alert()
+    if (error) return showToast(`Erro: ${error.message}`);
 
     await Promise.all([loadScore(), loadStats(), loadRecentEvents()]);
 
     const name = nameById[playerId] ?? playerId;
-    showToast(`Gol de ${name}! ⚽`);
 
-    // limpa seleção após registrar
+    // CORREÇÃO: passa undoFn direto no toast — botão de desfazer aparece por 5s
+    showToast(`Gol de ${name}! ⚽`, async () => {
+      await undoLast();
+    });
+
     if (side === "A") { setScorerA(""); setAssistA(""); }
     else { setScorerB(""); setAssistB(""); }
   }
@@ -486,9 +569,8 @@ export default function LiveMatchPage() {
       p_player_id: playerId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     await Promise.all([loadStats(), loadRecentEvents()]);
-
     const name = nameById[playerId] ?? playerId;
     showToast(`Defesa de ${name}! 🧤`);
     if (side === "A") setSaveA(""); else setSaveB("");
@@ -502,9 +584,8 @@ export default function LiveMatchPage() {
       p_player_id: playerId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     await Promise.all([loadStats(), loadRecentEvents()]);
-
     const name = nameById[playerId] ?? playerId;
     showToast(`Defesa difícil de ${name}! 🧱`);
     if (side === "A") setSaveA(""); else setSaveB("");
@@ -519,7 +600,7 @@ export default function LiveMatchPage() {
       p_in_id: inId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     await Promise.all([loadRoster(), loadRecentEvents()]);
     if (side === "A") { setSubOutA(""); setSubInA(""); }
     else { setSubOutB(""); setSubInB(""); }
@@ -531,9 +612,9 @@ export default function LiveMatchPage() {
       p_match_id: matchId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     await Promise.all([loadScore(), loadRoster(), loadStats(), loadRecentEvents()]);
-    showToast("Último evento desfeito");
+    showToast("Último evento desfeito ↩️");
   }
 
   async function nextRoundSameTeams() {
@@ -542,14 +623,14 @@ export default function LiveMatchPage() {
       p_match_id: matchId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     window.location.href = `/match/${data}/live`;
   }
 
   async function nextRoundRotation() {
     if (!canEdit) return;
     if (play1 === play2 || play1 === waiting || play2 === waiting) {
-      return alert("Joga 1, Joga 2 e Espera devem ser diferentes (A/B/C).");
+      return showToast("Joga 1, Joga 2 e Espera devem ser diferentes (A/B/C).");
     }
     const { data, error } = await supabase.rpc("finish_and_create_next_with_rotation", {
       p_match_id: matchId,
@@ -558,7 +639,7 @@ export default function LiveMatchPage() {
       p_playing_side_2: play2,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     window.location.href = `/match/${data}/live`;
   }
 
@@ -568,7 +649,7 @@ export default function LiveMatchPage() {
       p_match_id: matchId,
       p_pin: pinInput,
     });
-    if (error) return alert(error.message);
+    if (error) return showToast(`Erro: ${error.message}`);
     window.location.href = `/meeting/${data}`;
   }
 
@@ -615,7 +696,25 @@ export default function LiveMatchPage() {
     const matchCh = supabase
       .channel(`match:${matchId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
-        async () => { await loadMatchMeta(); })
+        async () => {
+          await loadMatchMeta();
+          // CORREÇÃO: atualiza timer de outros devices via realtime,
+          // mas ignora updates causados pelo próprio device para evitar loop
+          if (!timerSyncInProgress.current) {
+            const { data } = await supabase
+              .from("matches")
+              .select("timer_acc_ms,timer_started_at")
+              .eq("id", matchId)
+              .single();
+            if (data) {
+              const accMs = data.timer_acc_ms ?? 0;
+              const startedAt = data.timer_started_at ? new Date(data.timer_started_at).getTime() : null;
+              setTimerAccMs(accMs);
+              setTimerOriginMs(startedAt);
+              setTimerRunning(startedAt !== null);
+            }
+          }
+        })
       .subscribe();
 
     const rosterCh = supabase
@@ -647,26 +746,30 @@ export default function LiveMatchPage() {
       return (
         <span className={e.reverted ? "line-through opacity-50" : ""}>
           <span className="mr-1">⚽</span>
-          <b>{n(e.player_id)}</b>{assist} {badge} <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
+          <b>{n(e.player_id)}</b>{assist} {badge}{" "}
+          <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
         </span>
       );
     }
     if (e.type === "SAVE") return (
       <span className={e.reverted ? "line-through opacity-50" : ""}>
         <span className="mr-1">🧤</span>
-        <b>{n(e.player_id)}</b> {badge} <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
+        <b>{n(e.player_id)}</b> {badge}{" "}
+        <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
       </span>
     );
     if (e.type === "SAVE_HARD") return (
       <span className={e.reverted ? "line-through opacity-50" : ""}>
         <span className="mr-1">🧱</span>
-        <b>{n(e.player_id)}</b> {badge} <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
+        <b>{n(e.player_id)}</b> {badge}{" "}
+        <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
       </span>
     );
     if (e.type === "SUB") return (
       <span className={e.reverted ? "line-through opacity-50" : ""}>
         <span className="mr-1">🔄</span>
-        {n(e.out_id)} → <b>{n(e.in_id)}</b> {badge} <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
+        {n(e.out_id)} → <b>{n(e.in_id)}</b> {badge}{" "}
+        <span className="text-muted-foreground text-[10px]">{time}{undone}</span>
       </span>
     );
     return <span>{time} · {e.type}{undone}</span>;
@@ -678,7 +781,7 @@ export default function LiveMatchPage() {
   const playerBtnUnselected = "bg-background/60 hover:bg-muted/50";
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // TeamPanel
+  // TeamPanel — CORREÇÃO: Defesa e Defesa Difícil registram sem modal (igual ao Gol)
   // ─────────────────────────────────────────────────────────────────────────────
 
   const TeamPanel = ({
@@ -697,10 +800,10 @@ export default function LiveMatchPage() {
     subOut: string; setSubOut: (v: string) => void;
     subIn: string; setSubIn: (v: string) => void;
   }) => {
-    // Stats de TODOS os jogadores do time (inclui banco)
     const allTeamRoster = useMemo(
       () => roster.filter((r) => r.side === side),
-      [side]
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [side, roster]
     );
 
     return (
@@ -780,42 +883,51 @@ export default function LiveMatchPage() {
             </div>
           </div>
 
+          {/* Assist — só aparece no modo GOL quando já tem marcador */}
           {mode === "GOAL" && scorer && (
             <div className="space-y-2">
-              <div className="text-xs font-black">ASSISTÊNCIA (opcional)</div>
+              <div className="text-xs font-black text-muted-foreground">ASSISTÊNCIA (opcional)</div>
               <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button" variant="outline" aria-pressed={!assist}
-                  className={cn(playerBtnBase, !assist ? playerBtnSelected : playerBtnUnselected)}
-                  onClick={() => setAssist("")}
-                >
-                  Sem assist
-                </Button>
-                {onCourt.filter((p) => p.player_id !== scorer).map((p) => {
-                  const selected = assist === p.player_id;
-                  return (
-                    <Button
-                      key={p.player_id} type="button" variant="outline" aria-pressed={selected}
-                      className={cn(playerBtnBase, selected ? playerBtnSelected : playerBtnUnselected)}
-                      onClick={() => setAssist(selected ? "" : p.player_id)}
-                    >
-                      <span className="truncate max-w-[220px]">{p.players?.name ?? p.player_id}</span>
-                    </Button>
-                  );
-                })}
+                {onCourt
+                  .filter((p) => p.player_id !== scorer)
+                  .map((p) => {
+                    const name = p.players?.name ?? p.player_id;
+                    const selected = assist === p.player_id;
+                    return (
+                      <Button
+                        key={p.player_id}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-full min-h-[36px] px-3",
+                          selected ? playerBtnSelected : playerBtnUnselected
+                        )}
+                        onClick={() => setAssist(selected ? "" : p.player_id)}
+                      >
+                        <span className="truncate max-w-[180px]">{name}</span>
+                      </Button>
+                    );
+                  })}
               </div>
             </div>
           )}
 
-          {mode === "SUB" && (
+          {/* Sub — entrada (banco) */}
+          {mode === "SUB" && subOut && (
             <div className="space-y-2">
-              <div className="text-xs font-black">BANCO</div>
+              <div className="text-xs font-black">ENTRA (BANCO)</div>
               <div className="flex flex-wrap gap-2">
                 {bench.map((p) => {
+                  const name = p.players?.name ?? p.player_id;
                   const selected = subIn === p.player_id;
                   return (
                     <Button
-                      key={p.player_id} type="button" variant="outline" aria-pressed={selected}
+                      key={p.player_id}
+                      type="button"
+                      variant="outline"
+                      aria-pressed={selected}
                       className={cn(playerBtnBase, selected ? playerBtnSelected : playerBtnUnselected)}
                       onClick={() => setSubIn(selected ? "" : p.player_id)}
                     >
@@ -829,7 +941,7 @@ export default function LiveMatchPage() {
 
           <Separator />
 
-          {/* Botão de registro — gol sem modal, outros com modal */}
+          {/* Botões de registro — CORREÇÃO: SAVE e SAVE_HARD agora são diretos, sem modal */}
           {mode === "GOAL" && (
             <Button
               className="w-full min-h-[44px]"
@@ -837,7 +949,6 @@ export default function LiveMatchPage() {
               onClick={async () => {
                 if (!scorer) return;
                 await ensureNames([scorer, assist || null]);
-                // Gol: registra direto sem modal (mais rápido durante o jogo)
                 await addGoal(side, scorer, assist || undefined);
               }}
             >
@@ -852,7 +963,7 @@ export default function LiveMatchPage() {
               onClick={async () => {
                 if (!saver) return;
                 await ensureNames([saver]);
-                setConfirm({ kind: "SAVE", side, playerId: saver });
+                await addSave(side, saver);
               }}
             >
               🧤 Registrar Defesa ({side})
@@ -866,7 +977,7 @@ export default function LiveMatchPage() {
               onClick={async () => {
                 if (!saver) return;
                 await ensureNames([saver]);
-                setConfirm({ kind: "SAVE_HARD", side, playerId: saver });
+                await addHardSave(side, saver);
               }}
             >
               🧱 Registrar Defesa Difícil ({side})
@@ -895,35 +1006,28 @@ export default function LiveMatchPage() {
 
           <Separator />
 
-          {/* Stats de TODOS do time (não só em quadra) */}
+          {/* Stats do time */}
           <div className="space-y-2">
             <div className="text-xs font-black">STATS DO TIME</div>
             <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2">
               {allTeamRoster.map((p) => {
-                const s = stats[p.player_id] ?? ({ goals: 0, assists: 0, saves: 0, hard_saves: 0 } as StatRow);
+                const s = stats[p.player_id] ?? { goals: 0, assists: 0, saves: 0, hard_saves: 0 };
                 const name = p.players?.name ?? p.player_id;
-                const isBench = p.state === "BENCH";
-
                 return (
-                  <Card key={p.player_id} className={cn(CARD_SURFACE_STATIC, isBench && "opacity-60")}>
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="font-black leading-tight line-clamp-2 break-words text-sm">{name}</div>
-                        <div className="flex gap-1 shrink-0">
-                          {isBench && <Badge variant="outline" className="text-[10px] h-5 px-1">banco</Badge>}
-                          <Badge variant="secondary" className="text-[10px] h-5 px-1">
-                            {p.players?.preferred_pos ?? "-"}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-2 flex-wrap">
-                        <StatMini label="G" value={s.goals ?? 0} />
-                        <StatMini label="A" value={s.assists ?? 0} />
-                        <StatMini label="D" value={s.saves ?? 0} />
-                        <StatMini label="DD" value={s.hard_saves ?? 0} />
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <div key={p.player_id} className="rounded-xl border bg-muted/30 px-3 py-2">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-xs font-black truncate">{name}</span>
+                      {p.state === "BENCH" && (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">banco</Badge>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {(s.goals ?? 0) > 0 && <StatMini label="G" value={s.goals ?? 0} />}
+                      {(s.assists ?? 0) > 0 && <StatMini label="A" value={s.assists ?? 0} />}
+                      {(s.saves ?? 0) > 0 && <StatMini label="D" value={s.saves ?? 0} />}
+                      {(s.hard_saves ?? 0) > 0 && <StatMini label="DD" value={s.hard_saves ?? 0} />}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -934,219 +1038,121 @@ export default function LiveMatchPage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Vencedor atual
+  // Render
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const winner: "A" | "B" | null = scoreA > scoreB ? "A" : scoreB > scoreA ? "B" : null;
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // JSX
-  // ─────────────────────────────────────────────────────────────────────────────
+  const teamAColor = meta.colorA;
+  const teamBColor = meta.colorB;
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Toast de feedback */}
-      {toast && <Toast msg={toast} onDone={() => setToast(null)} />}
-
-      {/* ── Header sticky ── */}
+      {/* ── Header ── */}
       <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
-        <div className="max-w-5xl mx-auto px-4 py-3 space-y-3">
-          <div className="text-xs text-muted-foreground">
-            Partida ao vivo
-            {matchInfo.seq != null && <> · Rodada <b className="text-foreground">{matchInfo.seq}</b></>}
-            {matchInfo.status && <> · <b className="text-foreground">{statusLabel(matchInfo.status)}</b></>}
-          </div>
-
-          {/* Placar com destaque do vencedor */}
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div className="space-y-1">
-              <div className="grid grid-cols-2 gap-2 items-center">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: meta.colorA }} />
-                  <div className={cn("font-black truncate", winner === "A" && "text-primary")}>{meta.teamA}</div>
-                  {winner === "A" && <span className="text-xs font-black text-primary shrink-0">▲</span>}
+        <div className="max-w-5xl mx-auto px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-3 min-w-0">
+              <a href={`/match/${matchId}/setup`} className="text-muted-foreground hover:text-foreground text-sm shrink-0">
+                ← Setup
+              </a>
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">
+                  {matchInfo.seq ? `Partida ${matchInfo.seq}` : "Partida"} · {statusLabel(matchInfo.status)}
                 </div>
-                <div className="flex items-center justify-end gap-2 min-w-0">
-                  {winner === "B" && <span className="text-xs font-black text-primary shrink-0">▲</span>}
-                  <div className={cn("font-black truncate text-right", winner === "B" && "text-primary")}>{meta.teamB}</div>
-                  <span className="h-3 w-3 rounded-full border shrink-0" style={{ background: meta.colorB }} />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-center gap-3">
-                <div
-                  className={cn(
-                    "tabular-nums font-black transition-all",
-                    winner === "A" ? "text-6xl sm:text-5xl text-primary" : "text-5xl sm:text-4xl"
-                  )}
-                >
-                  {scoreA}
-                </div>
-                <div className="text-muted-foreground text-2xl font-black">x</div>
-                <div
-                  className={cn(
-                    "tabular-nums font-black transition-all",
-                    winner === "B" ? "text-6xl sm:text-5xl text-primary" : "text-5xl sm:text-4xl"
-                  )}
-                >
-                  {scoreB}
+                <div className="font-black truncate text-sm">
+                  {meta.teamA} vs {meta.teamB}
                 </div>
               </div>
             </div>
 
-            {/* Timer persistido */}
-            <Card className={cn(CARD_SURFACE_STATIC, "w-full sm:w-[260px]")}>
-              <CardContent className="p-2">
-                <div className="text-[10px] font-semibold text-muted-foreground">TEMPO</div>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <div className={cn("font-black tabular-nums text-xl", timerRunning && "text-primary")}>
-                    {fmtMs(displayMs)}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={timerRunning ? "default" : "outline"}
-                      size="sm"
-                      className="min-h-[36px]"
-                      onClick={handleTimerToggle}
-                      type="button"
-                    >
-                      {timerRunning ? "Pausar" : "Iniciar"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="min-h-[36px]"
-                      onClick={handleTimerReset}
-                      type="button"
-                    >
-                      Zerar
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Timer */}
+              <div className="flex items-center gap-1 rounded-xl border bg-muted/50 px-2 py-1">
+                <span className="text-sm font-black tabular-nums">{fmtMs(displayMs)}</span>
+                <button
+                  onClick={handleTimerToggle}
+                  disabled={!canEdit}
+                  className="rounded px-1 py-0.5 text-xs hover:bg-muted disabled:opacity-40"
+                >
+                  {timerRunning ? "⏸" : "▶"}
+                </button>
+                <button
+                  onClick={handleTimerReset}
+                  disabled={!canEdit}
+                  className="rounded px-1 py-0.5 text-xs hover:bg-muted disabled:opacity-40"
+                >
+                  ↺
+                </button>
+              </div>
 
-          {/* Ações */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <Button variant="destructive" className="min-h-[44px]" onClick={endThisMatch} disabled={!canEdit}>
-              Encerrar
-            </Button>
-            <Button
-              variant="outline"
-              className="min-h-[44px] border-destructive text-destructive hover:text-destructive"
-              onClick={undoLast}
-              disabled={!canEdit}
-            >
-              Desfazer
-            </Button>
-            <Button className="min-h-[44px] col-span-2 sm:col-span-1" onClick={nextRoundSameTeams} disabled={!canEdit}>
-              Próxima rodada
-            </Button>
-            {hasTeamC && (
-              <Button
-                className="col-span-2 sm:col-span-3 min-h-[44px]"
-                variant={showRotation ? "default" : "outline"}
-                onClick={() => setShowRotation((v) => !v)}
-              >
-                {showRotation ? "▼ Rotação (3 times)" : "▶ Rotação (3 times)"}
-              </Button>
-            )}
-          </div>
-
-          {/* Rotação — sempre visível quando expandido */}
-          {showRotation && (
-            <Card className={CARD_SURFACE_STATIC}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Próxima rodada — rotação</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 pb-3">
-                <div className="grid md:grid-cols-3 gap-2">
-                  {(["Joga 1", "Joga 2", "Espera"] as const).map((label, i) => {
-                    const val = i === 0 ? play1 : i === 1 ? play2 : waiting;
-                    const set = i === 0 ? setPlay1 : i === 1 ? setPlay2 : setWaiting;
-                    return (
-                      <div key={label} className="space-y-1">
-                        <div className="text-sm text-muted-foreground">{label}</div>
-                        <select
-                          className="h-10 w-full rounded-md border bg-background/70 px-3"
-                          value={val}
-                          onChange={(e) => set(e.target.value as Side3)}
-                        >
-                          <option value="A">{meta.teamA}</option>
-                          <option value="B">{meta.teamB}</option>
-                          <option value="C">{meta.wait}</option>
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Button className="w-full min-h-[44px]" onClick={nextRoundRotation} disabled={!canEdit}>
-                  Avançar com rotação
+              {/* PIN */}
+              <div className="flex items-center gap-1">
+                <Input
+                  type="password"
+                  placeholder="PIN"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && unlockEdit()}
+                  className="w-20 h-8 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant={canEdit ? "default" : "outline"}
+                  className="h-8 text-xs px-2"
+                  onClick={canEdit ? lockEdit : unlockEdit}
+                >
+                  {canEdit ? "🔓" : "🔒"}
                 </Button>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </div>
+          </div>
 
-          {/* Mobile tabs dos times */}
-          <div className="md:hidden">
-            <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as TeamSide)}>
+          {/* Tabs mobile A/B */}
+          <div className="flex md:hidden">
+            <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as TeamSide)} className="w-full">
               <TabsList className="w-full">
-                <TabsTrigger className="flex-1" value="A">{meta.teamA}</TabsTrigger>
-                <TabsTrigger className="flex-1" value="B">{meta.teamB}</TabsTrigger>
+                <TabsTrigger value="A" className="flex-1">
+                  <span className="h-2 w-2 rounded-full mr-1" style={{ background: teamAColor }} />
+                  {meta.teamA}
+                </TabsTrigger>
+                <TabsTrigger value="B" className="flex-1">
+                  <span className="h-2 w-2 rounded-full mr-1" style={{ background: teamBColor }} />
+                  {meta.teamB}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
         </div>
       </div>
 
-      {/* ── Controles PIN ── */}
-      <div className="max-w-5xl mx-auto px-4 pt-3 space-y-3">
-        <Card className={CARD_SURFACE_STATIC}>
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="text-sm text-muted-foreground">
-                Edição: <b className="text-foreground">{canEdit ? "LIBERADA" : "SOMENTE LEITURA"}</b>
+      {/* ── Placar ── */}
+      <div className="max-w-5xl mx-auto px-4 pt-4">
+        <Card
+          className="overflow-hidden relative"
+          style={{
+            background: `linear-gradient(135deg, ${teamAColor}22 0%, transparent 50%, ${teamBColor}22 100%)`,
+          }}
+        >
+          <div className="grid grid-cols-2 divide-x">
+            <div className="flex flex-col items-center py-6 px-4">
+              <div
+                className="text-xs font-black mb-2 truncate max-w-full"
+                style={{ color: contrastText(teamAColor) === "#111827" ? teamAColor : "inherit" }}
+              >
+                {meta.teamA}
               </div>
-              <Input
-                type="password"
-                className="w-44"
-                placeholder="PIN do grupo"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-              />
-              <Button className="min-h-[44px]" onClick={unlockEdit} type="button">Liberar</Button>
-              <Button className="min-h-[44px]" variant="outline" onClick={lockEdit} type="button">Bloquear</Button>
-              <div className="ml-auto flex items-center gap-3 text-sm">
-                <a className="underline" href={`/match/${matchId}/setup`}>Setup</a>
-                <a className="underline" href={`/g/${groupId}`}>Grupo</a>
-                <a className="underline" href="/">Home</a>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Placar visual (card colorido) ── */}
-        <Card className="overflow-hidden">
-          <div className="relative grid grid-cols-2">
-            <div
-              style={{ background: meta.colorA, color: contrastText(meta.colorA) }}
-              className={cn("p-5 transition-all", winner === "A" && "py-7")}
-            >
-              <div className="text-sm font-black opacity-90">Time A</div>
-              <div className="text-2xl font-black leading-tight truncate">{meta.teamA}</div>
-              <div className={cn("mt-2 font-black tabular-nums", winner === "A" ? "text-6xl" : "text-5xl")}>
+              <div className={cn("font-black tabular-nums", winner === "A" ? "text-6xl" : "text-5xl")}>
                 {scoreA}
               </div>
-              {winner === "A" && <div className="text-xs font-black mt-1 opacity-80">VENCENDO ▲</div>}
+              {winner === "A" && <div className="text-xs font-black mt-1 opacity-80">▲ VENCENDO</div>}
             </div>
-            <div
-              style={{ background: meta.colorB, color: contrastText(meta.colorB) }}
-              className={cn("p-5 text-right transition-all", winner === "B" && "py-7")}
-            >
-              <div className="text-sm font-black opacity-90">Time B</div>
-              <div className="text-2xl font-black leading-tight truncate">{meta.teamB}</div>
-              <div className={cn("mt-2 font-black tabular-nums", winner === "B" ? "text-6xl" : "text-5xl")}>
+            <div className="flex flex-col items-center py-6 px-4">
+              <div
+                className="text-xs font-black mb-2 truncate max-w-full"
+                style={{ color: contrastText(teamBColor) === "#111827" ? teamBColor : "inherit" }}
+              >
+                {meta.teamB}
+              </div>
+              <div className={cn("font-black tabular-nums", winner === "B" ? "text-6xl" : "text-5xl")}>
                 {scoreB}
               </div>
               {winner === "B" && <div className="text-xs font-black mt-1 opacity-80">▲ VENCENDO</div>}
@@ -1156,9 +1162,9 @@ export default function LiveMatchPage() {
           </div>
         </Card>
 
-        {/* ── Mini-ranking em tempo real ── */}
+        {/* ── Mini-ranking ── */}
         {topScorers.length > 0 && (
-          <Card className={CARD_SURFACE}>
+          <Card className={cn(CARD_SURFACE, "mt-4")}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Destaques da partida</CardTitle>
             </CardHeader>
@@ -1167,10 +1173,7 @@ export default function LiveMatchPage() {
                 {topScorers.slice(0, 5).map((p, i) => (
                   <div key={p.player_id} className="flex items-center gap-3 text-sm">
                     <span className="text-muted-foreground w-4 tabular-nums">{i + 1}</span>
-                    <div
-                      className="h-2 w-2 rounded-full shrink-0"
-                      style={{ background: p.side === "A" ? meta.colorA : meta.colorB }}
-                    />
+                    <div className="h-2 w-2 rounded-full shrink-0" style={{ background: p.side === "A" ? meta.colorA : meta.colorB }} />
                     <span className="font-black truncate flex-1">{p.name}</span>
                     <div className="flex gap-2 shrink-0">
                       {p.goals > 0 && <span className="text-xs">⚽ {p.goals}</span>}
@@ -1187,17 +1190,30 @@ export default function LiveMatchPage() {
         )}
 
         {/* ── Log de eventos ── */}
-        <Card className={CARD_SURFACE}>
+        <Card className={cn(CARD_SURFACE, "mt-4")}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">Log de eventos</CardTitle>
-              <Button variant="outline" size="sm" className="min-h-[36px]" onClick={loadRecentEvents} type="button">
-                Atualizar
-              </Button>
+              <div className="flex gap-2">
+                {/* CORREÇÃO: botão de desfazer permanente também disponível no log */}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="min-h-[36px]"
+                  disabled={!canEdit || recent.filter((e) => !e.reverted).length === 0}
+                  onClick={undoLast}
+                  type="button"
+                >
+                  ↩ Desfazer
+                </Button>
+                <Button variant="outline" size="sm" className="min-h-[36px]" onClick={loadRecentEvents} type="button">
+                  Atualizar
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="min-h-[180px] max-h-[35vh] overflow-y-auto pr-1">
+            <div className="min-h-[120px] max-h-[30vh] overflow-y-auto pr-1">
               {recent.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Sem eventos ainda.</div>
               ) : (
@@ -1213,7 +1229,7 @@ export default function LiveMatchPage() {
       </div>
 
       {/* ── Times ── */}
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+      <div className="max-w-5xl mx-auto px-4 py-4 space-y-4">
         {roster.length === 0 ? (
           <Card className={CARD_SURFACE}>
             <CardContent className="p-4">
@@ -1251,44 +1267,101 @@ export default function LiveMatchPage() {
         )}
       </div>
 
-      {/* ── Modal confirmação (Defesa / Sub) ── */}
+      {/* ── Rodada seguinte / Encerrar ── */}
+      {canEdit && (
+        <div className="max-w-5xl mx-auto px-4 pb-8 space-y-4">
+          <Separator />
+
+          <div className="space-y-3">
+            <div className="text-sm font-black">PRÓXIMA RODADA</div>
+
+            <Button className="w-full min-h-[44px]" variant="outline" onClick={nextRoundSameTeams}>
+              🔁 Próxima rodada (mesmos times)
+            </Button>
+
+            {hasTeamC && (
+              <Card className="p-4 space-y-3">
+                <div className="text-sm font-black">COM ROTAÇÃO (Time C entra)</div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {(["play1", "play2", "waiting"] as const).map((field) => {
+                    const val = field === "play1" ? play1 : field === "play2" ? play2 : waiting;
+                    const setVal = field === "play1" ? setPlay1 : field === "play2" ? setPlay2 : setWaiting;
+                    const label = field === "play1" ? "Joga 1" : field === "play2" ? "Joga 2" : "Espera";
+                    return (
+                      <div key={field} className="space-y-1">
+                        <div className="font-semibold text-muted-foreground">{label}</div>
+                        <div className="flex flex-col gap-1">
+                          {(["A", "B", "C"] as Side3[]).map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setVal(s)}
+                              className={cn(
+                                "rounded-lg border px-2 py-1 text-xs font-bold transition-colors",
+                                val === s ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                              )}
+                            >
+                              {s === "A" ? meta.teamA : s === "B" ? meta.teamB : meta.wait}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button className="w-full min-h-[44px]" onClick={nextRoundRotation}>
+                  🔄 Próxima rodada com rotação
+                </Button>
+              </Card>
+            )}
+
+            <Button className="w-full min-h-[44px]" variant="destructive" onClick={endThisMatch}>
+              🏁 Encerrar encontro
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal confirmação — somente SUB ── */}
       <Dialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar</DialogTitle>
+            <DialogTitle>Confirmar Substituição</DialogTitle>
           </DialogHeader>
           <div className="text-sm">
-            {confirm?.kind === "SAVE" && (
-              <>Defesa ({confirm.side}) de <b>{nameById[confirm.playerId] ?? confirm.playerId}</b></>
-            )}
-            {confirm?.kind === "SAVE_HARD" && (
-              <>Defesa Difícil ({confirm.side}) de <b>{nameById[confirm.playerId] ?? confirm.playerId}</b></>
-            )}
             {confirm?.kind === "SUB" && (
-              <>Sub ({confirm.side}) · sai <b>{nameById[confirm.outId] ?? confirm.outId}</b> · entra <b>{nameById[confirm.inId] ?? confirm.inId}</b></>
+              <>
+                Sub ({confirm.side}) · sai{" "}
+                <b>{nameById[confirm.outId] ?? confirm.outId}</b> · entra{" "}
+                <b>{nameById[confirm.inId] ?? confirm.inId}</b>
+              </>
             )}
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" className="flex-1 min-h-[44px]" onClick={() => setConfirm(null)} type="button">
-              Cancelar
-            </Button>
+          <div className="flex gap-2 mt-2">
             <Button
-              className="flex-1 min-h-[44px]"
-              type="button"
+              className="flex-1"
               onClick={async () => {
-                const c = confirm;
+                if (!confirm) return;
+                await doSub(confirm.side, confirm.outId, confirm.inId);
                 setConfirm(null);
-                if (!c) return;
-                if (c.kind === "SAVE") await addSave(c.side, c.playerId);
-                if (c.kind === "SAVE_HARD") await addHardSave(c.side, c.playerId);
-                if (c.kind === "SUB") await doSub(c.side, c.outId, c.inId);
               }}
             >
               Confirmar
             </Button>
+            <Button variant="outline" className="flex-1" onClick={() => setConfirm(null)}>
+              Cancelar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <Toast
+          msg={toast.msg}
+          onUndo={toast.undoFn}
+          onDone={() => setToast(null)}
+        />
+      )}
     </main>
   );
 }
