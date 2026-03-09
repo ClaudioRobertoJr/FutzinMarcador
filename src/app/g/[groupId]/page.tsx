@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { MoreVertical, KeyRound } from "lucide-react";
+import { KeyRound, Pencil, UserX, ArrowLeftRight } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -20,18 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-// dialog (PIN)
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-// dropdown menu (mobile)
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+// ─── tipos ────────────────────────────────────────────────────────────────────
 
 type Pos = "GK" | "FIXO" | "ALA_E" | "ALA_D" | "PIVO";
 
@@ -57,6 +48,8 @@ type LastMatch = {
   started_at: string;
 };
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
 function clamp99(n: number) {
   if (Number.isNaN(n)) return 0;
   return Math.max(0, Math.min(99, n));
@@ -68,12 +61,14 @@ function typeLabel(t: Player["type"]) {
 
 function posLabel(p: Pos | null) {
   if (!p) return "sem posição";
-  if (p === "GK") return "Goleiro (GK)";
-  if (p === "FIXO") return "Fixo";
-  if (p === "ALA_E") return "Ala E";
-  if (p === "ALA_D") return "Ala D";
-  if (p === "PIVO") return "Pivô";
-  return p;
+  const map: Record<string, string> = {
+    GK: "Goleiro (GK)",
+    FIXO: "Fixo",
+    ALA_E: "Ala E",
+    ALA_D: "Ala D",
+    PIVO: "Pivô",
+  };
+  return map[p] ?? p;
 }
 
 function StatPill({ label, value }: { label: string; value: number }) {
@@ -89,6 +84,8 @@ function StatPill({ label, value }: { label: string; value: number }) {
   );
 }
 
+// ─── PlayerCard ───────────────────────────────────────────────────────────────
+
 function PlayerCard({
   p,
   canEdit,
@@ -102,6 +99,8 @@ function PlayerCard({
 }) {
   const [open, setOpen] = useState(false);
 
+  // card stats
+  const [editName, setEditName] = useState(p.name);
   const [pos, setPos] = useState<Pos | "">(p.preferred_pos ?? "");
   const [pace, setPace] = useState<number>(p.pace ?? 50);
   const [sho, setSho] = useState<number>(p.shooting ?? 50);
@@ -110,6 +109,7 @@ function PlayerCard({
   const [phy, setPhy] = useState<number>(p.physical ?? 50);
 
   useEffect(() => {
+    setEditName(p.name);
     setPos(p.preferred_pos ?? "");
     setPace(p.pace ?? 50);
     setSho(p.shooting ?? 50);
@@ -118,9 +118,24 @@ function PlayerCard({
     setPhy(p.physical ?? 50);
   }, [p]);
 
+  // Salva nome + stats + posição
   async function save() {
     if (!canEdit) return;
 
+    const newName = editName.trim();
+    if (!newName) return alert("Nome não pode ser vazio.");
+
+    // Renomear se mudou
+    if (newName !== p.name) {
+      const { error } = await supabase.rpc("rename_player", {
+        p_player_id: p.id,
+        p_name: newName,
+        p_pin: pinInput,
+      });
+      if (error) return alert(error.message);
+    }
+
+    // Atualizar card
     const { error } = await supabase.rpc("update_player_card", {
       p_player_id: p.id,
       p_preferred_pos: pos || null,
@@ -131,10 +146,35 @@ function PlayerCard({
       p_physical: clamp99(phy),
       p_pin: pinInput,
     });
-
     if (error) return alert(error.message);
 
     setOpen(false);
+    await onSaved();
+  }
+
+  // Alterna tipo FIXO ↔ COMPLETE
+  async function toggleType() {
+    if (!canEdit) return;
+    const newType = p.type === "FIXO" ? "COMPLETE" : "FIXO";
+    const { error } = await supabase.rpc("set_player_type", {
+      p_player_id: p.id,
+      p_type: newType,
+      p_pin: pinInput,
+    });
+    if (error) return alert(error.message);
+    await onSaved();
+  }
+
+  // Inativar jogador
+  async function deactivate() {
+    if (!canEdit) return;
+    if (!confirm(`Inativar "${p.name}"? Ele não aparecerá mais nas listas.`)) return;
+    const { error } = await supabase.rpc("set_player_active", {
+      p_player_id: p.id,
+      p_active: false,
+      p_pin: pinInput,
+    });
+    if (error) return alert(error.message);
     await onSaved();
   }
 
@@ -143,7 +183,6 @@ function PlayerCard({
       <CardContent className={(open ? "p-4 space-y-3" : "p-3 space-y-2") + " h-full flex flex-col"}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {/* nome truncado (altura consistente) */}
             <div className="text-lg font-black leading-tight truncate" title={p.name}>
               {p.name}
             </div>
@@ -176,12 +215,27 @@ function PlayerCard({
           <>
             <Separator />
 
+            {/* Editar nome */}
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <Pencil className="h-3 w-3" />
+                Nome
+              </div>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                disabled={!canEdit}
+                placeholder="Nome do jogador"
+              />
+            </div>
+
             <div className="grid sm:grid-cols-2 gap-3">
+              {/* Posição */}
               <div className="space-y-1">
                 <div className="text-xs font-semibold text-muted-foreground">Posição</div>
                 <Select
                   value={pos || "__none__"}
-                  onValueChange={(v) => setPos((v === "__none__" ? "" : (v as Pos)) as any)}
+                  onValueChange={(v) => setPos(v === "__none__" ? "" : (v as Pos))}
                   disabled={!canEdit}
                 >
                   <SelectTrigger>
@@ -198,68 +252,76 @@ function PlayerCard({
                 </Select>
               </div>
 
-              <div className="text-xs text-muted-foreground leading-relaxed">
-                Fixos/Completes: use para separar quem está sempre no grupo vs quem entra quando precisa.
+              {/* Tipo (toggle) */}
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-muted-foreground">Tipo</div>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="w-full h-10 justify-between"
+                  disabled={!canEdit}
+                  onClick={toggleType}
+                >
+                  <span>{typeLabel(p.type)}</span>
+                  <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                </Button>
               </div>
             </div>
 
+            {/* Stats */}
+            <div className="text-xs font-semibold text-muted-foreground">
+              Atributos — VEL / CHU / PAS / DEF / FIS
+            </div>
             <div className="grid grid-cols-5 gap-2">
-              <Input
-                className="text-center tabular-nums"
-                type="number"
-                min={0}
-                max={99}
-                value={pace}
-                onChange={(e) => setPace(+e.target.value)}
-                disabled={!canEdit}
-              />
-              <Input
-                className="text-center tabular-nums"
-                type="number"
-                min={0}
-                max={99}
-                value={sho}
-                onChange={(e) => setSho(+e.target.value)}
-                disabled={!canEdit}
-              />
-              <Input
-                className="text-center tabular-nums"
-                type="number"
-                min={0}
-                max={99}
-                value={pas}
-                onChange={(e) => setPas(+e.target.value)}
-                disabled={!canEdit}
-              />
-              <Input
-                className="text-center tabular-nums"
-                type="number"
-                min={0}
-                max={99}
-                value={def}
-                onChange={(e) => setDef(+e.target.value)}
-                disabled={!canEdit}
-              />
-              <Input
-                className="text-center tabular-nums"
-                type="number"
-                min={0}
-                max={99}
-                value={phy}
-                onChange={(e) => setPhy(+e.target.value)}
-                disabled={!canEdit}
-              />
+              {[
+                [pace, setPace],
+                [sho, setSho],
+                [pas, setPas],
+                [def, setDef],
+                [phy, setPhy],
+              ].map(([val, setter], i) => (
+                <Input
+                  key={i}
+                  className="text-center tabular-nums"
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={val as number}
+                  onChange={(e) => (setter as (n: number) => void)(+e.target.value)}
+                  disabled={!canEdit}
+                />
+              ))}
             </div>
 
-            <Button className="w-full" onClick={save} disabled={!canEdit} type="button">
-              Salvar card do jogador
-            </Button>
+            {/* Ações */}
+            <div className="flex gap-2 flex-wrap pt-1">
+              <Button className="flex-1" onClick={save} disabled={!canEdit} type="button">
+                Salvar
+              </Button>
+              <Button
+                variant="destructive"
+                className="h-10"
+                onClick={deactivate}
+                disabled={!canEdit}
+                type="button"
+                title="Inativar jogador"
+              >
+                <UserX className="h-4 w-4 mr-1" />
+                Inativar
+              </Button>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground">
+              Inativar remove o jogador das listas (não apaga histórico).
+            </p>
           </>
         )}
       </CardContent>
     </Card>
   );
 }
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function GroupPage() {
   const { groupId } = useParams<{ groupId: string }>();
@@ -294,7 +356,7 @@ export default function GroupPage() {
       alert(error.message);
       return false;
     }
-    return !!ok;
+    return !ok;
   }
 
   async function loadPinState() {
@@ -329,7 +391,7 @@ export default function GroupPage() {
       .select("id,name,type,preferred_pos,pace,shooting,passing,defending,physical")
       .eq("group_id", groupId)
       .eq("active", true)
-      .order("created_at", { ascending: false });
+      .order("name", { ascending: true });
 
     if (error) return alert(error.message);
     setPlayers((data ?? []) as Player[]);
@@ -338,9 +400,7 @@ export default function GroupPage() {
   async function loadLastMatch() {
     const { data, error } = await supabase
       .from("matches")
-      .select(
-        "id,meeting_id,status,seq,team_a_name,team_b_name,started_at,meetings!inner(group_id)"
-      )
+      .select("id,meeting_id,status,seq,team_a_name,team_b_name,started_at,meetings!inner(group_id)")
       .eq("meetings.group_id", groupId)
       .eq("status", "IN_PROGRESS")
       .order("started_at", { ascending: false })
@@ -360,7 +420,6 @@ export default function GroupPage() {
         team_b_name: row.team_b_name,
         started_at: row.started_at,
       });
-
       setMeetingId(row.meeting_id);
       setMatchId(row.id);
     }
@@ -378,7 +437,6 @@ export default function GroupPage() {
       p_type: playerType,
       p_pin: pinInput,
     });
-
     if (e1) return alert(e1.message);
 
     const { error: e2 } = await supabase.rpc("update_player_card", {
@@ -391,7 +449,6 @@ export default function GroupPage() {
       p_physical: 50,
       p_pin: pinInput,
     });
-
     if (e2) return alert(e2.message);
 
     setPlayerName("");
@@ -411,7 +468,6 @@ export default function GroupPage() {
       p_team_b_name: "Time B",
       p_pin: pinInput,
     });
-
     if (error) return alert(error.message);
 
     const row: any = Array.isArray(data) ? data[0] : data;
@@ -439,7 +495,7 @@ export default function GroupPage() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Header sticky bem baixo no mobile */}
+      {/* Header sticky */}
       <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
@@ -453,61 +509,30 @@ export default function GroupPage() {
               </div>
             </div>
 
-            {/* Desktop */}
-            <div className="hidden sm:flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 gap-2"
-                onClick={() => setPinOpen(true)}
-              >
-                <KeyRound className="h-4 w-4" />
-                PIN
-              </Button>
-              <Button asChild variant="outline" size="sm" className="h-9">
-                <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
-              </Button>
-              <Button asChild variant="outline" size="sm" className="h-9">
-                <Link href="/">Voltar</Link>
-              </Button>
-            </div>
-
-            {/* Mobile: menu com ícone */}
-            <div className="sm:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Mais opções">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => setPinOpen(true)}>PIN / Edição</DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/">Voltar</Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPinOpen(true)}
+              className="gap-2 h-9 shrink-0"
+            >
+              <KeyRound className="h-4 w-4" />
+              <span className="hidden sm:inline">PIN</span>
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Dialog de PIN (tira o “card flutuante” do header) */}
+      {/* Dialog PIN */}
       <Dialog open={pinOpen} onOpenChange={setPinOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>PIN do grupo</DialogTitle>
+            <DialogTitle>PIN de edição</DialogTitle>
           </DialogHeader>
-
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="text-sm text-muted-foreground">
-              Status: <b className="text-foreground">{canEdit ? "Edição liberada" : "Somente leitura"}</b>
+              Edição:{" "}
+              <b className="text-foreground">{canEdit ? "Edição liberada" : "Somente leitura"}</b>
             </div>
-
             <div className="space-y-1">
               <div className="text-xs font-semibold text-muted-foreground">PIN</div>
               <Input
@@ -517,7 +542,6 @@ export default function GroupPage() {
                 onChange={(e) => setPinInput(e.target.value)}
               />
             </div>
-
             <div className="flex gap-2 flex-wrap">
               <Button onClick={unlockEdit} className="flex-1">
                 Liberar edição
@@ -526,7 +550,6 @@ export default function GroupPage() {
                 Bloquear
               </Button>
             </div>
-
             <div className="text-xs text-muted-foreground">
               Dica: após liberar, o PIN fica salvo no seu navegador (localStorage).
             </div>
@@ -535,20 +558,21 @@ export default function GroupPage() {
       </Dialog>
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
-        {/* Seção Partida (separada dos Jogadores) */}
+        {/* Seção Partida */}
         <Card className="border bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-lg">Partida</CardTitle>
-              <Badge variant="outline">{lastMatch ? "em andamento" : "nenhuma em andamento"}</Badge>
+              <Badge variant="outline">
+                {lastMatch ? "em andamento" : "nenhuma em andamento"}
+              </Badge>
             </div>
           </CardHeader>
-
           <CardContent className="space-y-3">
             {lastMatch ? (
               <div className="text-sm">
-                Em andamento: <b>{lastMatch.team_a_name}</b> vs <b>{lastMatch.team_b_name}</b> (Rodada{" "}
-                {lastMatch.seq})
+                Em andamento: <b>{lastMatch.team_a_name}</b> vs <b>{lastMatch.team_b_name}</b>{" "}
+                (Rodada {lastMatch.seq})
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
@@ -560,13 +584,11 @@ export default function GroupPage() {
               <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
                 Criar encontro + partida
               </Button>
-
               <Button asChild variant="outline" className="h-12" disabled={!matchId}>
                 <Link href={matchId ? `/match/${matchId}/setup` : "#"} aria-disabled={!matchId}>
                   Setup da partida
                 </Link>
               </Button>
-
               <Button asChild variant="outline" className="h-12" disabled={!matchId}>
                 <Link href={matchId ? `/match/${matchId}/live` : "#"} aria-disabled={!matchId}>
                   Abrir ao vivo
@@ -589,7 +611,6 @@ export default function GroupPage() {
           <CardHeader className="pb-3 space-y-2">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <CardTitle className="text-lg">Jogadores</CardTitle>
-
               <Tabs value={listTab} onValueChange={(v) => setListTab(v as any)}>
                 <TabsList>
                   <TabsTrigger value="FIXO">Fixos ({fixes.length})</TabsTrigger>
@@ -597,18 +618,21 @@ export default function GroupPage() {
                 </TabsList>
               </Tabs>
             </div>
-
             <div className="text-xs text-muted-foreground">{tabHint}</div>
           </CardHeader>
 
           <CardContent className="space-y-4">
+            {/* Adicionar jogador */}
             <div className="grid md:grid-cols-4 gap-2">
               <div className="md:col-span-2">
-                <div className="text-xs font-semibold text-muted-foreground mb-1">Nome do jogador</div>
+                <div className="text-xs font-semibold text-muted-foreground mb-1">
+                  Nome do jogador
+                </div>
                 <Input
                   placeholder="Ex: Renan"
                   value={playerName}
                   onChange={(e) => setPlayerName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addPlayer()}
                 />
               </div>
 
@@ -629,7 +653,7 @@ export default function GroupPage() {
                 <div className="text-xs font-semibold text-muted-foreground mb-1">Posição</div>
                 <Select
                   value={playerPos || "__none__"}
-                  onValueChange={(v) => setPlayerPos((v === "__none__" ? "" : (v as Pos)) as any)}
+                  onValueChange={(v) => setPlayerPos(v === "__none__" ? "" : (v as Pos))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="(sem)" />
@@ -650,7 +674,6 @@ export default function GroupPage() {
               <Button onClick={addPlayer} disabled={!canEdit}>
                 Adicionar jogador
               </Button>
-
               {!canEdit && (
                 <Badge variant="secondary" className="text-muted-foreground">
                   Somente leitura (informe o PIN)
@@ -665,7 +688,13 @@ export default function GroupPage() {
             ) : (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {list.map((p) => (
-                  <PlayerCard key={p.id} p={p} canEdit={canEdit} pinInput={pinInput} onSaved={loadPlayers} />
+                  <PlayerCard
+                    key={p.id}
+                    p={p}
+                    canEdit={canEdit}
+                    pinInput={pinInput}
+                    onSaved={loadPlayers}
+                  />
                 ))}
               </div>
             )}
