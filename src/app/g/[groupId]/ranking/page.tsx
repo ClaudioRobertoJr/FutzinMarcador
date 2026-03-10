@@ -4,10 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { Medal, Trophy } from "lucide-react";
+import { Medal, Trophy, ChevronLeft } from "lucide-react";
 
 // shadcn/ui
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -157,15 +156,20 @@ export default function RankingPage() {
     <main className="min-h-screen bg-background text-foreground">
       <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur">
         <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-xs text-muted-foreground">Ranking</div>
-              <div className="text-xl font-black">Pontos / Gols / Assists / Defesas / DD</div>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={`/g/${groupId}`}
+                className="shrink-0 flex items-center justify-center h-9 w-9 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                aria-label="Voltar ao grupo"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </Link>
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Ranking</div>
+                <div className="text-xl font-black leading-tight">Pontos / Gols / Assists / Defesas / DD</div>
+              </div>
             </div>
-
-            <Button asChild variant="outline">
-              <Link href={`/g/${groupId}`}>Voltar</Link>
-            </Button>
           </div>
 
           <Card className="p-3">

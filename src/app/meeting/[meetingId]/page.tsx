@@ -481,9 +481,12 @@ export default function MeetingPage() {
                           <span>{m.team_b_name}</span>
                         </div>
 
-                        <div className="text-xs text-muted-foreground">
+                        <div className="flex gap-3 text-xs text-muted-foreground">
+                          <Link className="underline" href={`/match/${m.match_id}/postgame`}>
+                            Pós-jogo
+                          </Link>
                           <Link className="underline" href={`/match/${m.match_id}/live`}>
-                            Abrir Live
+                            Live
                           </Link>
                         </div>
                       </CardContent>

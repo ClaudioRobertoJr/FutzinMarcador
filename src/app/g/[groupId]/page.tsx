@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
-import { KeyRound, Pencil, UserX, ArrowLeftRight } from "lucide-react";
+import { KeyRound, Pencil, UserX, ArrowLeftRight, ChevronLeft, BarChart2 } from "lucide-react";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -347,7 +347,7 @@ export default function GroupPage() {
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
   const [lastMatch, setLastMatch] = useState<LastMatch | null>(null);
-
+  
   // PIN
   const [pinInput, setPinInput] = useState("");
   const [canEdit, setCanEdit] = useState(false);
@@ -476,7 +476,6 @@ export default function GroupPage() {
       p_group_id: groupId,
       p_starts_at: new Date().toISOString(),
       p_minutes: 10,
-      p_on_court: 5,
       p_team_a_name: "Time A",
       p_team_b_name: "Time B",
       p_pin: pinInput,
@@ -593,20 +592,28 @@ export default function GroupPage() {
               </div>
             )}
 
-            <div className="grid md:grid-cols-3 gap-2">
-              <Button className="h-12" onClick={createMeetingAndMatch} disabled={!canEdit}>
+            <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-2">
+              <Button className="h-12" onClick={createMeetingAndMatch} aria-disabled={!canEdit}>
                 Criar partida
               </Button>
               <Button asChild variant="outline" className="h-12" disabled={!matchId}>
                 <Link href={matchId ? `/match/${matchId}/setup` : "#"} aria-disabled={!matchId}>
-                  Setup da partida
+                  Setup
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="h-12" disabled={!matchId}>
+                <Link href={matchId ? `/match/${matchId}/postgame` : "#"} aria-disabled={!matchId}>
+                  Pós-jogo
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-12" disabled={!matchId}>
                 <Link href={matchId ? `/match/${matchId}/live` : "#"} aria-disabled={!matchId}>
-                  Abrir ao vivo
+                  Live
                 </Link>
               </Button>
+              <Button asChild variant="outline" className="h-12">
+                          <Link href={`/g/${groupId}/ranking`}>Ranking</Link>
+                        </Button>
             </div>
 
             {meetingId && (
